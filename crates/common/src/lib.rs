@@ -66,6 +66,7 @@ pub mod expr;
 pub mod i18n;
 pub mod ipc;
 pub mod manager;
+pub mod masked;
 pub mod network;
 pub mod scripts;
 pub mod sharing;

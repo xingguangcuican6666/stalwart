@@ -10,7 +10,6 @@
 
 pub mod config;
 pub mod license;
-pub mod masked;
 
 use crate::{
     Core, LogoCache, Server, USER_AGENT, config::groupware::CalendarTemplateVariable,

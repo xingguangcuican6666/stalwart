@@ -620,15 +620,8 @@ impl Server {
                             local_part = Cow::Borrowed(new_local_part);
                         }
                     }
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-
-                    #[cfg(feature = "enterprise")]
-                    if self.is_enterprise_edition()
-                        && let Cow::Borrowed(addr) = &local_part
-                        && let Some(masked_id) =
-                            crate::enterprise::masked::MaskedAddress::parse(addr)
+                    if let Cow::Borrowed(addr) = &local_part
+                        && let Some(masked_id) = crate::masked::MaskedAddress::parse(addr)
                         && let Some(masked_entry) = self
                             .registry()
                             .object::<MaskedEmail>(Id::new(masked_id))
@@ -641,7 +634,6 @@ impl Server {
                     {
                         return Ok(Some(masked_entry.account_id.document_id()));
                     }
-                    // SPDX-SnippetEnd
                 }
 
                 let mut result = self

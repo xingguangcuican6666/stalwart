@@ -40,12 +40,11 @@ pub mod tls;
 // Clean-room AGPL: telemetry read API, compiled unconditionally.
 pub mod telemetry;
 
+pub mod masked_email;
+
 // SPDX-SnippetBegin
 // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
 // SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
-pub mod masked_email;
-
 #[cfg(feature = "enterprise")]
 pub mod archived_item;
 // SPDX-SnippetEnd

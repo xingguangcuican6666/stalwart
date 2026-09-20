@@ -437,10 +437,6 @@ impl RegistrySet for Server {
                         ObjectInner::Role(role) => {
                             validate_role(self, access_token, role, modification.as_role()).await?
                         }
-                        // SPDX-SnippetBegin
-                        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                        // SPDX-License-Identifier: LicenseRef-SEL
-                        #[cfg(feature = "enterprise")]
                         ObjectInner::MaskedEmail(masked_email) => {
                             crate::registry::mapping::masked_email::validate_masked_email(
                                 &set,
@@ -450,7 +446,6 @@ impl RegistrySet for Server {
                             )
                             .await?
                         }
-                        // SPDX-SnippetEnd
                         ObjectInner::PublicKey(key) => {
                             validate_public_key(&set, key, modification.as_public_key()).await?
                         }
