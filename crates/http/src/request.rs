@@ -613,11 +613,7 @@ impl ParseHttp for Server {
                 }
                 _ => (),
             },
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
-            "logo" if self.is_enterprise_edition() => {
+            "logo" => {
                 let domain_hint = req
                     .uri()
                     .query()
@@ -648,7 +644,6 @@ impl ParseHttp for Server {
                     }
                 }
             }
-            // SPDX-SnippetEnd
             "form" => {
                 if let Some(form) = &self.core.network.contact_form {
                     match *req.method() {

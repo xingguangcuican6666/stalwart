@@ -4,17 +4,20 @@
  * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL
  */
 
-use crate::Server;
+use crate::{LogoCache, Server, USER_AGENT, manager::application::Resource};
 use directory::Directory;
 use registry::{
     schema::{
         enums::{StorageQuota, TenantStorageQuota},
         prelude::ObjectType,
+        structs::{Domain, Tenant},
     },
     types::EnumImpl,
 };
 use std::sync::Arc;
 use store::{BlobStore, InMemoryStore, RegistryStore, SearchStore, Store};
+use trc::AddContext;
+use utils::HttpLimitResponse;
 
 pub mod archive;
 pub mod blob;
@@ -95,11 +98,109 @@ impl Server {
         self.registry().count_object(ObjectType::Domain).await
     }
 
-    #[cfg(not(feature = "enterprise"))]
-    pub async fn logo_resource(
-        &self,
-        _: &str,
-    ) -> trc::Result<Option<crate::manager::application::Resource<Vec<u8>>>> {
-        Ok(None)
+    /// Resolves the branding logo shown for `domain`, following a
+    /// most-specific-first lookup: the domain's own logo, then its tenant's,
+    /// then the server-wide default. The first URL found is downloaded (capped
+    /// at 1 MiB) and memoised in the shared logo cache, keyed by registrable
+    /// domain (or `"*"` for the default), so repeat lookups avoid the network.
+    pub async fn logo_resource(&self, domain: &str) -> trc::Result<Option<Resource<Vec<u8>>>> {
+        const MAX_LOGO_SIZE: usize = 1024 * 1024;
+
+        // Normalise to the registrable domain so `mail.example.org` and
+        // `example.org` share one cache entry.
+        let mut cache_key = psl::domain_str(domain).unwrap_or(domain);
+
+        if let Some(cached) = self.inner.data.logos.lock().get(cache_key).cloned() {
+            return Ok(cached.data);
+        }
+
+        // Resolve the logo URL from the domain record, then its tenant.
+        let mut logo_url = None;
+        let mut domain_id = u32::MAX;
+        let mut tenant_id = None;
+
+        if let Some((id, id_tenant)) = self.domain(cache_key).await?.map(|d| (d.id, d.id_tenant))
+            && let Some(record) = self.registry().object::<Domain>(id.into()).await?
+        {
+            domain_id = id;
+            tenant_id = id_tenant;
+            logo_url = record.logo;
+
+            if logo_url.is_none()
+                && let Some(tenant_id) = tenant_id
+            {
+                logo_url = self
+                    .registry()
+                    .object::<Tenant>(tenant_id.into())
+                    .await?
+                    .and_then(|tenant| tenant.logo);
+            }
+        } else {
+            // Unknown domain: only the server-wide default can apply.
+            cache_key = "*";
+        }
+
+        // Fall back to the deployment default, reusing its `"*"` cache slot.
+        if logo_url.is_none()
+            && let Some(default_url) = self.core.branding.logo_url.clone()
+        {
+            if let Some(cached) = self.inner.data.logos.lock().get("*").cloned() {
+                return Ok(cached.data);
+            }
+            logo_url = Some(default_url);
+        }
+
+        // Download and wrap the image, if any URL resolved.
+        let mut resource = None;
+        if let Some(logo_url) = logo_url {
+            let response = utils::http::http_client_builder(false)
+                .user_agent(USER_AGENT)
+                .build()
+                .unwrap_or_default()
+                .get(logo_url.as_str())
+                .send()
+                .await
+                .map_err(|err| {
+                    trc::ResourceEvent::DownloadExternal
+                        .into_err()
+                        .details("Failed to download logo")
+                        .reason(err)
+                })?;
+
+            let content_type = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("image/svg+xml")
+                .to_string();
+
+            let contents = response
+                .bytes_with_limit(MAX_LOGO_SIZE)
+                .await
+                .map_err(|err| {
+                    trc::ResourceEvent::DownloadExternal
+                        .into_err()
+                        .details("Failed to download logo")
+                        .reason(err)
+                })?
+                .ok_or_else(|| {
+                    trc::ResourceEvent::DownloadExternal
+                        .into_err()
+                        .details("Download exceeded maximum size")
+                })?;
+
+            resource = Some(Resource::new(content_type, contents));
+        }
+
+        self.inner.data.logos.lock().insert(
+            cache_key.into(),
+            LogoCache {
+                domain_id,
+                tenant_id,
+                data: resource.clone(),
+            },
+        );
+
+        Ok(resource)
     }
 }

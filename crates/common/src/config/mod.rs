@@ -28,6 +28,7 @@ use rsa::{
 use store::registry::bootstrap::Bootstrap;
 use telemetry::Metrics;
 
+pub mod branding;
 pub mod groupware;
 pub mod inner;
 pub mod mailstore;
@@ -101,6 +102,7 @@ impl Core {
             ai,
             email: EmailConfig::parse(bp).await,
             groupware: GroupwareConfig::parse(bp).await,
+            branding: crate::config::branding::BrandingConfig::parse(bp).await,
             storage,
         }
     }

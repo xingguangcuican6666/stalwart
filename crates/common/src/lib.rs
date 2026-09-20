@@ -385,6 +385,7 @@ pub struct Core {
     pub ai: crate::config::mailstore::ai::AiConfig,
     pub groupware: GroupwareConfig,
     pub metrics: Metrics,
+    pub branding: crate::config::branding::BrandingConfig,
 
     // SPDX-SnippetBegin
     // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>

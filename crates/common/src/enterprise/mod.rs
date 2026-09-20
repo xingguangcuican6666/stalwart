@@ -12,15 +12,13 @@ pub mod config;
 pub mod license;
 
 use crate::{
-    Core, LogoCache, Server, USER_AGENT, config::groupware::CalendarTemplateVariable,
-    manager::application::Resource,
+    Core, Server, config::groupware::CalendarTemplateVariable,
 };
 use license::LicenseKey;
 use mail_parser::DateTime;
-use registry::schema::structs::{Domain, Tenant};
 use std::{sync::Arc, time::Duration};
 use trc::AddContext;
-use utils::{HttpLimitResponse, template::Template};
+use utils::template::Template;
 
 #[derive(Clone)]
 pub struct Enterprise {
@@ -97,110 +95,4 @@ impl Server {
         Ok(true)
     }
 
-    pub async fn logo_resource(&self, domain: &str) -> trc::Result<Option<Resource<Vec<u8>>>> {
-        const MAX_IMAGE_SIZE: usize = 1024 * 1024;
-
-        if !self.is_enterprise_edition() {
-            return Ok(None);
-        }
-
-        let mut domain = psl::domain_str(domain).unwrap_or(domain);
-        let logo_cache = { self.inner.data.logos.lock().get(domain).cloned() };
-        if let Some(logo) = logo_cache {
-            return Ok(logo.data);
-        }
-
-        let mut logo_url = None;
-        let mut domain_id = u32::MAX;
-        let mut tenant_id = None;
-        if let Some((d_id, t_id)) = self.domain(domain).await?.map(|d| (d.id, d.id_tenant))
-            && let Some(domain_record) = self.registry().object::<Domain>(d_id.into()).await?
-        {
-            logo_url = domain_record.logo;
-            domain_id = d_id;
-            tenant_id = t_id;
-
-            if logo_url.is_none()
-                && let Some(tenant_id) = tenant_id
-            {
-                logo_url = self
-                    .registry()
-                    .object::<Tenant>(tenant_id.into())
-                    .await?
-                    .and_then(|t| t.logo);
-            }
-        } else {
-            domain = "*";
-        }
-
-        // Try fetching the default logo
-        if logo_url.is_none()
-            && let Some(default_logo_url) = self.default_logo_url()
-        {
-            let logo = { self.inner.data.logos.lock().get("*").cloned() };
-            if let Some(logo) = logo {
-                return Ok(logo.data);
-            }
-            logo_url = Some(default_logo_url);
-        }
-
-        let mut logo = None;
-        if let Some(logo_url) = logo_url {
-            let response = utils::http::http_client_builder(false)
-                .user_agent(USER_AGENT)
-                .build()
-                .unwrap_or_default()
-                .get(logo_url.as_str())
-                .send()
-                .await
-                .map_err(|err| {
-                    trc::ResourceEvent::DownloadExternal
-                        .into_err()
-                        .details("Failed to download logo")
-                        .reason(err)
-                })?;
-
-            let content_type = response
-                .headers()
-                .get(reqwest::header::CONTENT_TYPE)
-                .and_then(|ct| ct.to_str().ok())
-                .unwrap_or("image/svg+xml")
-                .to_string();
-
-            let contents = response
-                .bytes_with_limit(MAX_IMAGE_SIZE)
-                .await
-                .map_err(|err| {
-                    trc::ResourceEvent::DownloadExternal
-                        .into_err()
-                        .details("Failed to download logo")
-                        .reason(err)
-                })?
-                .ok_or_else(|| {
-                    trc::ResourceEvent::DownloadExternal
-                        .into_err()
-                        .details("Download exceeded maximum size")
-                })?;
-
-            logo = Resource::new(content_type, contents).into();
-        }
-
-        self.inner.data.logos.lock().insert(
-            domain.into(),
-            LogoCache {
-                domain_id,
-                tenant_id,
-                data: logo.clone(),
-            },
-        );
-
-        Ok(logo)
-    }
-
-    fn default_logo_url(&self) -> Option<String> {
-        self.core
-            .enterprise
-            .as_ref()
-            .and_then(|e| e.logo_url.as_ref().map(|l| l.into()))
-    }
 }
