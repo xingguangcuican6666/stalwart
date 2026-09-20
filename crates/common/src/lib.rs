@@ -386,6 +386,7 @@ pub struct Core {
     pub groupware: GroupwareConfig,
     pub metrics: Metrics,
     pub branding: crate::config::branding::BrandingConfig,
+    pub retention: crate::config::retention::RetentionConfig,
 
     // SPDX-SnippetBegin
     // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>

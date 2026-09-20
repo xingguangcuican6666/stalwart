@@ -443,21 +443,15 @@ pub async fn schedule_account_destruction(
     account_id: Id,
     account: &Account,
 ) -> trc::Result<()> {
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
+    // Delay destruction by the configured retention window so the account can
+    // be recovered within it; with no window configured, destroy immediately.
     let status = server
         .core
-        .enterprise
+        .retention
+        .deleted_accounts
         .as_ref()
-        .and_then(|e| e.deleted_accounts_retention.as_ref())
         .map(|retention| TaskStatus::at(store::write::now() as i64 + retention.as_secs() as i64))
         .unwrap_or_else(TaskStatus::now);
-    // SPDX-SnippetEnd
-
-    #[cfg(not(feature = "enterprise"))]
-    let status = TaskStatus::now();
 
     let (account_domain_id, account_name, account_type) = match account {
         Account::User(account) => (account.domain_id, account.name.clone(), AccountType::User),

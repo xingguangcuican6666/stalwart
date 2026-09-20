@@ -31,6 +31,7 @@ use telemetry::Metrics;
 pub mod branding;
 pub mod groupware;
 pub mod inner;
+pub mod retention;
 pub mod mailstore;
 pub mod network;
 pub mod server;
@@ -103,6 +104,7 @@ impl Core {
             email: EmailConfig::parse(bp).await,
             groupware: GroupwareConfig::parse(bp).await,
             branding: crate::config::branding::BrandingConfig::parse(bp).await,
+            retention: crate::config::retention::RetentionConfig::parse(bp).await,
             storage,
         }
     }

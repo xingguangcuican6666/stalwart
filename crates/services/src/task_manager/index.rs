@@ -591,21 +591,13 @@ async fn delete_email_metadata(
                 .caused_by(trc::location!())?;
             metadata.unindex(batch);
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-
-            // Hold blob for undeletion
-            #[cfg(feature = "enterprise")]
+            // Hold the blob for undeletion when a retention window is set: the
+            // deleted message is recorded as a recoverable ArchivedItem and its
+            // blob is kept alive until the window elapses.
             {
                 use email::message::metadata::ArchivedMetadataHeaderName;
 
-                if let Some(undelete_retention) = server
-                    .core
-                    .enterprise
-                    .as_ref()
-                    .and_then(|e| e.deleted_items_retention.as_ref())
-                {
+                if let Some(undelete_retention) = server.core.retention.deleted_items.as_ref() {
                     use email::message::metadata::MESSAGE_RECEIVED_MASK;
                     use registry::{
                         schema::structs::{ArchivedEmail, ArchivedItem},
@@ -684,8 +676,6 @@ async fn delete_email_metadata(
                         );
                 }
             }
-
-            // SPDX-SnippetEnd
         }
         None => {
             trc::event!(

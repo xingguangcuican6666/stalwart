@@ -263,10 +263,9 @@ pub(crate) async fn task_set(
 
         let due = task.due_timestamp();
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
+        // Cancelling a pending account-destruction task recovers the account:
+        // re-insert its principal object under its original id before clearing
+        // the task from the queue.
         if let Task::DestroyAccount(task) = task {
             use crate::registry::set::map_write_error;
             use registry::schema::{
@@ -274,16 +273,6 @@ pub(crate) async fn task_set(
                 structs::{Account, GroupAccount, UserAccount},
             };
             use store::registry::write::{RegistryWrite, RegistryWriteResult};
-
-            if !set.server.is_enterprise_edition() {
-                set.response.not_destroyed.append(
-                    id,
-                    SetError::forbidden().with_description(
-                        "Account recovery is not supported in this deployment".to_string(),
-                    ),
-                );
-                continue;
-            }
 
             let object = match task.account_type {
                 AccountType::User => Account::User(UserAccount {
@@ -314,18 +303,6 @@ pub(crate) async fn task_set(
                     continue;
                 }
             }
-        }
-        // SPDX-SnippetEnd
-
-        #[cfg(not(feature = "enterprise"))]
-        if let Task::DestroyAccount(_) = task {
-            set.response.not_destroyed.append(
-                id,
-                SetError::forbidden().with_description(
-                    "Account recovery is not supported in this deployment".to_string(),
-                ),
-            );
-            continue;
         }
 
         batch
