@@ -26,9 +26,12 @@ ENV DEBIAN_FRONTEND="noninteractive" \
 
 # RocksDB (via librocksdb-sys) and aws-lc-sys need a C/C++ toolchain and
 # libclang for bindgen; ca-certificates is required for crates.io over HTTPS.
+# git is required because Cargo.toml pulls some dependencies from git
+# repositories and CARGO_NET_GIT_FETCH_WITH_CLI=true makes cargo shell out to
+# the git CLI to fetch them.
 RUN apt-get update && \
     apt-get install -yq --no-install-recommends \
-        build-essential libclang-19-dev ca-certificates && \
+        build-essential libclang-19-dev ca-certificates git && \
     rm -rf /var/lib/apt/lists/*
 
 COPY . .
