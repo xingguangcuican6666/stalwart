@@ -21,12 +21,7 @@ use crate::{
 use common::{Server, config::mailstore::spamfilter::SpamFilterAction};
 use std::{fmt::Write, future::Future, vec};
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
 use crate::analysis::llm::SpamFilterAnalyzeLlm;
-// SPDX-SnippetEnd
 
 pub trait SpamFilterAnalyzeScore: Sync + Send {
     fn spam_filter_finalize(
@@ -235,15 +230,8 @@ impl SpamFilterAnalyzeScore for Server {
         // HTML content analysis
         self.spam_filter_analyze_html(ctx).await;
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-
         // LLM classification
-        #[cfg(feature = "enterprise")]
         self.spam_filter_analyze_llm(ctx).await;
-
-        // SPDX-SnippetEnd
 
         // Spam trap
         self.spam_filter_analyze_spam_trap(ctx).await;

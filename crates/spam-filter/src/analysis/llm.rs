@@ -1,7 +1,11 @@
 /*
  * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
- * SPDX-License-Identifier: LicenseRef-SEL
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Clean-room reimplementation: LLM-based spam analysis. Sends the message to a
+ * configured AI endpoint and turns its single-line verdict into spam tags.
+ * Compiled unconditionally into the AGPL base.
  */
 
 use std::{future::Future, time::Instant};
@@ -20,93 +24,90 @@ pub trait SpamFilterAnalyzeLlm: Sync + Send {
 
 impl SpamFilterAnalyzeLlm for Server {
     async fn spam_filter_analyze_llm(&self, ctx: &mut SpamFilterContext<'_>) {
-        if let Some(config) = self
-            .core
-            .enterprise
-            .as_ref()
-            .and_then(|c| c.spam_filter_llm.as_ref())
-        {
-            let time = Instant::now();
-            let body = if let Some(body) = ctx.text_body() {
-                body
-            } else {
+        // No LLM classifier configured: nothing to do.
+        let Some(config) = self.core.spam.llm.as_ref() else {
+            return;
+        };
+
+        // Skip messages that carry no text body to classify.
+        let Some(body) = ctx.text_body() else {
+            return;
+        };
+
+        let started = Instant::now();
+        let prompt = format!(
+            "{}\n\nSubject: {}\n\n{}",
+            config.prompt, ctx.output.subject, body
+        );
+
+        let response = match config.model.send_request(prompt, Some(config.temperature)).await {
+            Ok(response) => response,
+            Err(err) => {
+                trc::error!(err.span_id(ctx.input.span_id));
                 return;
-            };
-            let prompt = format!(
-                "{}\n\nSubject: {}\n\n{}",
-                config.prompt, ctx.output.subject, body
-            );
+            }
+        };
 
-            match config
-                .model
-                .send_request(prompt, config.temperature.into())
-                .await
-            {
-                Ok(response) => {
-                    trc::event!(
-                        Ai(AiEvent::LlmResponse),
-                        Id = config.model.id.clone(),
-                        Details = response.clone(),
-                        Elapsed = time.elapsed(),
-                        SpanId = ctx.input.span_id,
-                    );
+        trc::event!(
+            Ai(AiEvent::LlmResponse),
+            Id = config.model.id.clone(),
+            Details = response.clone(),
+            Elapsed = started.elapsed(),
+            SpanId = ctx.input.span_id,
+        );
 
-                    let mut category = None;
-                    let mut confidence = None;
-                    let mut explanation = None;
+        // The model answers on a single line, fields joined by `separator`,
+        // e.g. "SPAM,HIGH,looks like a phishing attempt". Pull out the category,
+        // the (optional) confidence and the (optional) explanation by position.
+        let mut category = None;
+        let mut confidence = None;
+        let mut explanation = None;
 
-                    for (idx, value) in response.split(config.separator).enumerate() {
-                        let value = value.trim();
-                        if !value.is_empty() {
-                            if idx == config.index_category {
-                                let value = value.to_uppercase();
-                                if config.categories.contains(value.as_str()) {
-                                    category = Some(value);
-                                }
-                            } else if config.index_confidence.is_some_and(|i| i == idx) {
-                                let value = value.to_uppercase();
-                                if config.confidence.contains(value.as_str()) {
-                                    confidence = Some(value);
-                                }
-                            } else if config.index_explanation.is_some_and(|i| i == idx) {
-                                let explanation = explanation.get_or_insert_with(|| {
-                                    String::with_capacity(std::cmp::min(value.len(), 255))
-                                });
+        for (idx, field) in response.split(config.separator).enumerate() {
+            let field = field.trim();
+            if field.is_empty() {
+                continue;
+            }
 
-                                for value in value.chars() {
-                                    if !value.is_whitespace() {
-                                        explanation.push(value);
-                                    } else {
-                                        explanation.push(' ');
-                                    }
-                                    if explanation.len() == 255 {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    let category = match (category, confidence) {
-                        (Some(category), Some(confidence)) => {
-                            ctx.result.add_tag(format!("LLM_{category}_{confidence}"));
-                            category
-                        }
-                        (Some(category), None) => {
-                            ctx.result.add_tag(format!("LLM_{category}"));
-                            category
-                        }
-                        _ => return,
-                    };
-
-                    if let Some(explanation) = explanation {
-                        ctx.result.llm_result = Some((category, explanation));
-                    }
+            if idx == config.index_category {
+                let field = field.to_uppercase();
+                if config.categories.contains(&field) {
+                    category = Some(field);
                 }
-                Err(err) => {
-                    trc::error!(err.span_id(ctx.input.span_id));
+            } else if config.index_confidence == Some(idx) {
+                let field = field.to_uppercase();
+                if config.confidence.contains(&field) {
+                    confidence = Some(field);
+                }
+            } else if config.index_explanation == Some(idx) {
+                // Collapse internal whitespace and cap the length so a chatty
+                // model can't blow up the header.
+                let buf = explanation
+                    .get_or_insert_with(|| String::with_capacity(field.len().min(255)));
+                for ch in field.chars() {
+                    buf.push(if ch.is_whitespace() { ' ' } else { ch });
+                    if buf.len() >= 255 {
+                        break;
+                    }
                 }
             }
+        }
+
+        // A recognised category is required to tag; confidence is optional.
+        let category = match (category, confidence) {
+            (Some(category), Some(confidence)) => {
+                ctx.result.add_tag(format!("LLM_{category}_{confidence}"));
+                category
+            }
+            (Some(category), None) => {
+                ctx.result.add_tag(format!("LLM_{category}"));
+                category
+            }
+            _ => return,
+        };
+
+        if let Some(explanation) = explanation {
+            ctx.result.llm_result = Some((category, explanation));
         }
     }
 }

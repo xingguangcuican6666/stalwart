@@ -78,6 +78,11 @@ impl Core {
         };
         // SPDX-SnippetEnd
 
+        // Parse AI endpoints up front so the spam-filter LLM config can resolve
+        // its model reference. `ai_apis_by_id` maps numeric object ids to the
+        // parsed endpoints; `ai` keeps the string-keyed map used at runtime.
+        let (ai, ai_apis_by_id) = crate::config::mailstore::ai::AiConfig::parse(bp).await;
+
         Self {
             // SPDX-SnippetBegin
             // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
@@ -92,7 +97,8 @@ impl Core {
             imap: ImapConfig::parse(bp).await,
             oauth: OAuthConfig::parse(bp).await,
             metrics: Metrics::parse(bp).await,
-            spam: SpamFilterConfig::parse(bp).await,
+            spam: SpamFilterConfig::parse(bp, &ai_apis_by_id).await,
+            ai,
             email: EmailConfig::parse(bp).await,
             groupware: GroupwareConfig::parse(bp).await,
             storage,

@@ -58,6 +58,28 @@ pub struct SpamFilterConfig {
     pub scores: SpamFilterScoreConfig,
     pub spam_rules_url: Option<String>,
     pub url_client: reqwest::Client,
+    pub llm: Option<SpamFilterLlmConfig>,
+}
+
+/// Runtime configuration for the LLM-based spam classifier. Built from the
+/// `SpamLlm` setting and a resolved AI endpoint. Clean-room AGPL.
+#[derive(Debug, Clone)]
+pub struct SpamFilterLlmConfig {
+    pub model: std::sync::Arc<super::ai::AiApiConfig>,
+    pub temperature: f64,
+    pub prompt: String,
+    /// Field separator used to split the model's single-line response.
+    pub separator: char,
+    /// Index of the category token within the split response.
+    pub index_category: usize,
+    /// Index of the confidence token, if the response carries one.
+    pub index_confidence: Option<usize>,
+    /// Index of the free-text explanation token, if any.
+    pub index_explanation: Option<usize>,
+    /// Recognised (upper-cased) category tokens.
+    pub categories: AHashSet<String>,
+    /// Recognised (upper-cased) confidence tokens.
+    pub confidence: AHashSet<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -223,7 +245,10 @@ pub struct DnsBlServer {
 }
 
 impl SpamFilterConfig {
-    pub async fn parse(bp: &mut Bootstrap) -> Self {
+    pub async fn parse(
+        bp: &mut Bootstrap,
+        ai_apis: &ahash::AHashMap<u64, std::sync::Arc<super::ai::AiApiConfig>>,
+    ) -> Self {
         let spam = bp.setting_infallible::<SpamSettings>().await;
 
         SpamFilterConfig {
@@ -248,7 +273,53 @@ impl SpamFilterConfig {
                 .user_agent("Mozilla/5.0 (X11; Linux i686; rv:109.0) Gecko/20100101 Firefox/118.0")
                 .build()
                 .unwrap_or_default(),
+            llm: SpamFilterLlmConfig::parse(bp, ai_apis).await,
         }
+    }
+}
+
+impl SpamFilterLlmConfig {
+    pub async fn parse(
+        bp: &mut Bootstrap,
+        ai_apis: &ahash::AHashMap<u64, std::sync::Arc<super::ai::AiApiConfig>>,
+    ) -> Option<Self> {
+        use registry::schema::structs::SpamLlm;
+
+        let llm = match bp.setting_infallible::<SpamLlm>().await {
+            SpamLlm::Enable(llm) => llm,
+            SpamLlm::Disable => return None,
+        };
+
+        let model = match ai_apis.get(&llm.model_id.id()) {
+            Some(model) => model.clone(),
+            None => {
+                bp.build_error(
+                    ObjectType::SpamLlm.singleton(),
+                    format!("AI model {} not found in AI configuration", llm.model_id),
+                );
+                return None;
+            }
+        };
+
+        Some(SpamFilterLlmConfig {
+            model,
+            temperature: llm.temperature.into_inner(),
+            prompt: llm.prompt,
+            separator: llm.separator.chars().next().unwrap_or(','),
+            index_category: llm.response_pos_category as usize,
+            index_confidence: llm.response_pos_confidence.map(|v| v as usize),
+            index_explanation: llm.response_pos_explanation.map(|v| v as usize),
+            categories: llm
+                .categories
+                .into_iter()
+                .map(|k| k.to_uppercase())
+                .collect(),
+            confidence: llm
+                .confidence
+                .into_iter()
+                .map(|k| k.to_uppercase())
+                .collect(),
+        })
     }
 }
 

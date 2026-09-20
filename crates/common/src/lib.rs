@@ -381,6 +381,7 @@ pub struct Core {
     pub imap: ImapConfig,
     pub smtp: SmtpConfig,
     pub spam: SpamFilterConfig,
+    pub ai: crate::config::mailstore::ai::AiConfig,
     pub groupware: GroupwareConfig,
     pub metrics: Metrics,
 

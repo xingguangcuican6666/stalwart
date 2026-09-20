@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL
  */
 
+pub mod ai;
 pub mod capabilities;
 pub mod email;
 pub mod imap;
