@@ -10,24 +10,18 @@
 
 pub mod config;
 pub mod license;
-pub mod llm;
 pub mod masked;
 
 use crate::{
     Core, LogoCache, Server, USER_AGENT, config::groupware::CalendarTemplateVariable,
-    expr::Expression, manager::application::Resource,
+    manager::application::Resource,
 };
-use ahash::{AHashMap, AHashSet};
 use license::LicenseKey;
-use llm::AiApiConfig;
 use mail_parser::DateTime;
-use registry::{
-    schema::structs::{Domain, Tenant},
-    types::id::ObjectId,
-};
+use registry::schema::structs::{Domain, Tenant};
 use std::{sync::Arc, time::Duration};
-use trc::{AddContext, MetricType};
-use utils::{HttpLimitResponse, cron::SimpleCron, template::Template};
+use trc::AddContext;
+use utils::{HttpLimitResponse, template::Template};
 
 #[derive(Clone)]
 pub struct Enterprise {
@@ -35,58 +29,9 @@ pub struct Enterprise {
     pub logo_url: Option<String>,
     pub deleted_items_retention: Option<Duration>,
     pub deleted_accounts_retention: Option<Duration>,
-    pub trace_retention: Option<Duration>,
-    pub metrics_retention: Option<Duration>,
-    pub metrics_interval: SimpleCron,
-    pub metrics_alerts: Vec<MetricAlert>,
-    pub ai_apis: AHashMap<String, Arc<AiApiConfig>>,
-    pub spam_filter_llm: Option<SpamFilterLlmConfig>,
     pub template_calendar_alarm: Option<Template<CalendarTemplateVariable>>,
     pub template_scheduling_email: Option<Template<CalendarTemplateVariable>>,
     pub template_scheduling_web: Option<Arc<str>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SpamFilterLlmConfig {
-    pub model: Arc<AiApiConfig>,
-    pub temperature: f64,
-    pub prompt: String,
-    pub separator: char,
-    pub index_category: usize,
-    pub index_confidence: Option<usize>,
-    pub index_explanation: Option<usize>,
-    pub categories: AHashSet<String>,
-    pub confidence: AHashSet<String>,
-}
-
-#[derive(Clone, Debug)]
-pub struct MetricAlert {
-    pub id: ObjectId,
-    pub condition: Expression,
-    pub method: Vec<AlertMethod>,
-}
-
-#[derive(Clone, Debug)]
-pub enum AlertMethod {
-    Email {
-        from_name: Option<String>,
-        from_addr: String,
-        to: Vec<String>,
-        subject: AlertContent,
-        body: AlertContent,
-    },
-    Event {
-        message: Option<AlertContent>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub struct AlertContent(pub Vec<AlertContentToken>);
-
-#[derive(Clone, Debug)]
-pub enum AlertContentToken {
-    Text(String),
-    Metric(MetricType),
 }
 
 impl Core {
