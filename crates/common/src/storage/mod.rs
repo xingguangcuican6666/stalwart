@@ -16,7 +16,6 @@ use registry::{
 };
 use std::sync::Arc;
 use store::{BlobStore, InMemoryStore, RegistryStore, SearchStore, Store};
-use trc::AddContext;
 use utils::HttpLimitResponse;
 
 pub mod archive;

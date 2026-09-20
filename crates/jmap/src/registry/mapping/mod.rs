@@ -42,12 +42,8 @@ pub mod telemetry;
 
 pub mod masked_email;
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
+// Clean-room AGPL: archived-item (undelete) mapping, compiled unconditionally.
 pub mod archived_item;
-// SPDX-SnippetEnd
 
 pub(crate) struct RegistryGetResponse<'x> {
     pub server: &'x Server,

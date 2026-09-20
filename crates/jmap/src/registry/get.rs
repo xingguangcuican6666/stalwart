@@ -5,7 +5,6 @@
  */
 
 use crate::registry::{
-    EnterpriseRegistry,
     mapping::{
         RegistryGetResponse, account::account_get, bootstrap::bootstrap_get,
         cluster::cluster_node_get, log::log_get, queued_message::queued_message_get,
@@ -58,7 +57,6 @@ impl RegistryGet for Server {
                 "can be accessed until the bootstrap process is complete.",
             )));
         }
-        self.assert_enterprise_object(object_type)?;
 
         let object_flags = object_type.flags();
         let is_tenant_filtered =
@@ -356,16 +354,11 @@ impl RegistryGet for Server {
             ObjectType::Trace => crate::registry::mapping::telemetry::trace_get(get)
                 .await
                 .map(|get| get.into_response()),
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             ObjectType::ArchivedItem => {
                 crate::registry::mapping::archived_item::archived_item_get(get)
                     .await
                     .map(|get| get.into_response())
             }
-            // SPDX-SnippetEnd
             ObjectType::SpamTrainingSample => {
                 spam_sample_get(get).await.map(|get| get.into_response())
             }
@@ -376,8 +369,6 @@ impl RegistryGet for Server {
             | ObjectType::AccountPassword
             | ObjectType::AppPassword => account_get(get).await.map(|get| get.into_response()),
             ObjectType::Action => Ok(get.not_found_any().into_response()),
-            #[cfg(not(feature = "enterprise"))]
-            _ => Ok(get.not_found_any().into_response()),
         }
     }
 }

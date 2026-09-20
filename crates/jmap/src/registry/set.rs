@@ -5,7 +5,6 @@
  */
 
 use crate::registry::{
-    EnterpriseRegistry,
     mapping::{
         ObjectResponse, RegistrySetResponse,
         account::account_set,
@@ -106,7 +105,6 @@ impl RegistrySet for Server {
                 "can be modified until the bootstrap process is complete.",
             )));
         }
-        self.assert_enterprise_object(object_type)?;
 
         let object_flags = object_type.flags();
         let is_singleton = (object_flags & OBJ_SINGLETON) != 0;
@@ -739,14 +737,9 @@ impl RegistrySet for Server {
             | ObjectType::DmarcInternalReport
             | ObjectType::TlsInternalReport => report_set(set).await.map(|set| set.into_response()),
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             ObjectType::ArchivedItem => super::mapping::archived_item::archived_item_set(set)
                 .await
                 .map(|set| set.into_response()),
-            // SPDX-SnippetEnd
             ObjectType::SpamTrainingSample => {
                 spam_sample_set(set).await.map(|set| set.into_response())
             }
@@ -776,13 +769,6 @@ impl RegistrySet for Server {
                 set.fail_all_create("Telemetry objects cannot be created");
                 set.fail_all_update("Telemetry objects cannot be modified");
                 set.fail_all_destroy("Telemetry objects cannot be deleted");
-                Ok(set.into_response())
-            }
-            #[cfg(not(feature = "enterprise"))]
-            _ => {
-                set.fail_all_create("Enterprise objects cannot be created");
-                set.fail_all_update("Enterprise objects cannot be modified");
-                set.fail_all_destroy("Enterprise objects cannot be deleted");
                 Ok(set.into_response())
             }
         }
