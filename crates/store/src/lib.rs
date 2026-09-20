@@ -156,12 +156,8 @@ pub enum Store {
     #[cfg(feature = "rocks")]
     RocksDb(Arc<backend::rocksdb::RocksDbStore>),
     Ephemeral(Arc<EphemeralStore>),
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+    #[cfg(any(feature = "postgres", feature = "mysql"))]
     SQLReadReplica(Arc<backend::composite::read_replica::SQLReadReplica>),
-    // SPDX-SnippetEnd
     #[default]
     None,
 }
@@ -174,12 +170,7 @@ pub enum BlobStore {
     S3(Arc<backend::s3::S3Store>),
     #[cfg(feature = "azure")]
     Azure(Arc<backend::azure::AzureStore>),
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
     Sharded(Arc<backend::composite::sharded_blob::ShardedBlob>),
-    // SPDX-SnippetEnd
 }
 
 #[derive(Clone)]
@@ -196,12 +187,7 @@ pub enum InMemoryStore {
     Redis(Arc<backend::redis::RedisStore>),
     Http(Arc<HttpStore>),
     Static(Arc<StaticMemoryStore>),
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
     Sharded(Arc<backend::composite::sharded_lookup::ShardedInMemory>),
-    // SPDX-SnippetEnd
 }
 
 #[derive(Clone)]
@@ -665,7 +651,7 @@ impl Store {
             #[cfg(feature = "rocks")]
             (Store::RocksDb(a), Store::RocksDb(b)) => Arc::ptr_eq(a, b),
             (Store::Ephemeral(a), Store::Ephemeral(b)) => Arc::ptr_eq(a, b),
-            #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+            #[cfg(any(feature = "postgres", feature = "mysql"))]
             (Store::SQLReadReplica(a), Store::SQLReadReplica(b)) => Arc::ptr_eq(a, b),
             (Store::None, Store::None) => true,
             _ => false,
@@ -681,12 +667,8 @@ impl Store {
             Store::PostgreSQL(_) => true,
             #[cfg(feature = "mysql")]
             Store::MySQL(_) => true,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+            #[cfg(any(feature = "postgres", feature = "mysql"))]
             Store::SQLReadReplica(_) => true,
-            // SPDX-SnippetEnd
             _ => false,
         }
     }
@@ -716,10 +698,6 @@ impl Store {
         matches!(self, Self::Ephemeral(_))
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
     pub fn downgrade_store(self) -> Self {
         match self {
             #[cfg(any(feature = "postgres", feature = "mysql"))]
@@ -728,15 +706,14 @@ impl Store {
         }
     }
 
-    #[cfg(feature = "enterprise")]
     pub fn is_enterprise(&self) -> bool {
         match self {
             #[cfg(any(feature = "postgres", feature = "mysql"))]
             Store::SQLReadReplica(_) => true,
+            #[allow(unreachable_patterns)]
             _ => false,
         }
     }
-    // SPDX-SnippetEnd
 }
 
 impl std::fmt::Debug for Store {
@@ -754,12 +731,8 @@ impl std::fmt::Debug for Store {
             Self::RocksDb(_) => f.debug_tuple("RocksDb").finish(),
             Self::Ephemeral(_) => f.debug_tuple("Ephemeral").finish(),
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+            #[cfg(any(feature = "postgres", feature = "mysql"))]
             Self::SQLReadReplica(_) => f.debug_tuple("SQLReadReplica").finish(),
-            // SPDX-SnippetEnd
             Self::None => f.debug_tuple("None").finish(),
         }
     }

@@ -1,196 +1,128 @@
 /*
  * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
  *
- * SPDX-License-Identifier: LicenseRef-SEL
- *
- * This file is subject to the Stalwart Enterprise License Agreement (SEL) and
- * is NOT open source software.
- *
+ * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL
  */
 
-#[cfg(feature = "redis")]
-use registry::schema::structs::InMemoryStoreBase;
-use registry::schema::structs::ShardedInMemoryStore;
+use std::sync::Arc;
+
+use registry::schema::structs::{InMemoryStoreBase, ShardedInMemoryStore};
+use trc::AddContext;
 
 use crate::{
     Deserialize, InMemoryStore, Value,
     dispatch::lookup::{KeyValue, LookupKey},
 };
-use std::sync::Arc;
 
+use super::shard_index;
+
+/// An in-memory (lookup) store that distributes keys across several backing
+/// stores. Only Redis-family backends are supported as shards; a given key is
+/// mapped deterministically to one shard by hashing it.
 #[derive(Debug)]
 pub struct ShardedInMemory {
     pub stores: Vec<InMemoryStore>,
 }
 
-#[allow(unreachable_patterns)]
 impl ShardedInMemory {
     pub async fn open(config: ShardedInMemoryStore) -> Result<InMemoryStore, String> {
-        if config.stores.len() >= 2 {
-            let mut stores = Vec::new();
+        let mut stores = Vec::with_capacity(config.stores.len());
 
-            for store in config.stores {
-                let result = match store {
-                    #[cfg(feature = "redis")]
-                    InMemoryStoreBase::Redis(redis_store) => {
-                        crate::backend::redis::RedisStore::open_single(redis_store).await
-                    }
-                    #[cfg(feature = "redis")]
-                    InMemoryStoreBase::RedisCluster(redis_cluster_store) => {
-                        crate::backend::redis::RedisStore::open_cluster(redis_cluster_store).await
-                    }
-                    _ => Err(
-                        "Binary was not compiled with the selected in-memory backend".to_string(),
-                    ),
-                };
-
-                stores.push(result?);
-            }
-
-            Ok(InMemoryStore::Sharded(Arc::new(ShardedInMemory { stores })))
-        } else {
-            Err(
-                "At least two in-memory stores are required for sharded in-memory store"
-                    .to_string(),
-            )
+        for base in config.stores {
+            let store = match base {
+                #[cfg(feature = "redis")]
+                InMemoryStoreBase::Redis(cfg) => {
+                    crate::backend::redis::RedisStore::open_single(cfg).await?
+                }
+                #[cfg(feature = "redis")]
+                InMemoryStoreBase::RedisCluster(cfg) => {
+                    crate::backend::redis::RedisStore::open_cluster(cfg).await?
+                }
+                #[cfg(feature = "redis")]
+                InMemoryStoreBase::RedisSentinel(cfg) => {
+                    crate::backend::redis::RedisStore::open_sentinel(cfg).await?
+                }
+                #[allow(unreachable_patterns)]
+                _ => {
+                    return Err(
+                        "A sharded in-memory store only supports Redis backends".to_string(),
+                    );
+                }
+            };
+            stores.push(store);
         }
+
+        if stores.len() < 2 {
+            return Err(
+                "A sharded in-memory store requires at least two backing stores".to_string(),
+            );
+        }
+
+        Ok(InMemoryStore::Sharded(Arc::new(ShardedInMemory { stores })))
     }
 
-    #[inline(always)]
+    #[inline]
     fn get_store(&self, key: &[u8]) -> &InMemoryStore {
-        &self.stores[xxhash_rust::xxh3::xxh3_64(key) as usize % self.stores.len()]
+        &self.stores[shard_index(key, self.stores.len())]
     }
 
     pub async fn key_set(&self, kv: KeyValue<Vec<u8>>) -> trc::Result<()> {
-        Box::pin(async move {
-            match self.get_store(&kv.key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.key_set(&kv.key, &kv.value, kv.expires).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        Box::pin(self.get_store(&kv.key).key_set(kv)).await
     }
 
     pub async fn counter_incr(&self, kv: KeyValue<i64>) -> trc::Result<i64> {
-        Box::pin(async move {
-            match self.get_store(&kv.key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.key_incr(&kv.key, kv.value, kv.expires).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
-    }
-
-    #[allow(unused_variables)]
-    pub async fn try_lock(&self, key: &[u8], expires: u64) -> trc::Result<bool> {
-        Box::pin(async move {
-            match self.get_store(key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.try_lock(key, expires).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        // Shards are Redis-only, whose atomic increment always yields the new
+        // value, so request the value back for a meaningful return.
+        Box::pin(self.get_store(&kv.key).counter_incr(kv, true)).await
     }
 
     pub async fn key_delete(&self, key: impl Into<LookupKey<'_>>) -> trc::Result<()> {
-        let key_ = key.into();
-        let key = key_.as_bytes();
-        Box::pin(async move {
-            match self.get_store(key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.key_delete(key).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        let key = key.into();
+        Box::pin(self.get_store(key.as_bytes()).key_delete(key)).await
     }
 
     pub async fn counter_delete(&self, key: impl Into<LookupKey<'_>>) -> trc::Result<()> {
-        let key_ = key.into();
-        let key = key_.as_bytes();
-        Box::pin(async move {
-            match self.get_store(key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.key_delete(key).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        let key = key.into();
+        Box::pin(self.get_store(key.as_bytes()).counter_delete(key)).await
     }
 
-    #[allow(unused_variables)]
     pub async fn key_delete_prefix(&self, prefix: &[u8]) -> trc::Result<()> {
-        Box::pin(async move {
-            #[cfg(feature = "redis")]
-            for store in &self.stores {
-                match store {
-                    InMemoryStore::Redis(store) => store.key_delete_prefix(prefix).await?,
-                    InMemoryStore::Static(_) => {
-                        return Err(trc::StoreEvent::NotSupported.into_err());
-                    }
-                    _ => return Err(trc::StoreEvent::NotSupported.into_err()),
-                }
-            }
-
-            Ok(())
-        })
-        .await
+        // A prefix can span multiple shards, so fan the deletion out to every
+        // backing store.
+        for store in &self.stores {
+            Box::pin(store.key_delete_prefix(prefix))
+                .await
+                .caused_by(trc::location!())?;
+        }
+        Ok(())
     }
 
     pub async fn key_get<T: Deserialize + From<Value<'static>> + std::fmt::Debug + 'static>(
         &self,
         key: impl Into<LookupKey<'_>>,
     ) -> trc::Result<Option<T>> {
-        let key_ = key.into();
-        let key = key_.as_bytes();
-        Box::pin(async move {
-            match self.get_store(key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.key_get(key).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        let key = key.into();
+        Box::pin(self.get_store(key.as_bytes()).key_get(key)).await
     }
 
     pub async fn counter_get(&self, key: impl Into<LookupKey<'_>>) -> trc::Result<i64> {
-        let key_ = key.into();
-        let key = key_.as_bytes();
-        Box::pin(async move {
-            match self.get_store(key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.counter_get(key).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        let key = key.into();
+        Box::pin(self.get_store(key.as_bytes()).counter_get(key)).await
     }
 
     pub async fn key_exists(&self, key: impl Into<LookupKey<'_>>) -> trc::Result<bool> {
-        let key_ = key.into();
-        let key = key_.as_bytes();
-        Box::pin(async move {
-            match self.get_store(key) {
-                #[cfg(feature = "redis")]
-                InMemoryStore::Redis(store) => store.key_exists(key).await,
-                InMemoryStore::Static(_) => Err(trc::StoreEvent::NotSupported.into_err()),
-                _ => Err(trc::StoreEvent::NotSupported.into_err()),
-            }
-        })
-        .await
+        let key = key.into();
+        Box::pin(self.get_store(key.as_bytes()).key_exists(key)).await
     }
 
-    pub fn into_single(self) -> InMemoryStore {
-        self.stores.into_iter().next().unwrap()
+    pub async fn try_lock(&self, key: &[u8], duration: u64) -> trc::Result<bool> {
+        // The caller passes an already-assembled `[prefix, ..rest]` key. The
+        // underlying `try_lock` reassembles a key from a prefix byte plus the
+        // remainder, so split the first byte back out to avoid double-prefixing;
+        // this keeps the lock key identical to the one `remove_lock` (via
+        // `key_delete`) will compute. `build_key` always emits at least the
+        // prefix byte, so `key` is never empty here.
+        let (prefix, rest) = key.split_first().expect("lock key must be non-empty");
+        Box::pin(self.get_store(key).try_lock(*prefix, rest, duration)).await
     }
 }

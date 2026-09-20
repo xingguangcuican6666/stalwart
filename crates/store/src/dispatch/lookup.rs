@@ -47,12 +47,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_set(&kv.key, &kv.value, kv.expires).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.key_set(kv).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -98,12 +93,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_incr(&kv.key, kv.value, kv.expires).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.counter_incr(kv).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -123,12 +113,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_delete(key.into().as_bytes()).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.key_delete(key).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -148,12 +133,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_delete(key.into().as_bytes()).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.counter_delete(key).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -193,12 +173,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_delete_prefix(prefix).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.key_delete_prefix(prefix).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -219,12 +194,7 @@ impl InMemoryStore {
                 .map(|value| value.and_then(|v| v.into())),
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_get(key.into().as_bytes()).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.key_get(key).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(store) => Ok(match store.as_ref() {
                 StaticMemoryStore::Map(map) => map
                     .get(key.into().as_str())
@@ -255,12 +225,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.counter_get(key.into().as_bytes()).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.counter_get(key).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -278,12 +243,7 @@ impl InMemoryStore {
                 .map(|value| matches!(value, Some(LookupValue::Value(Empty)))),
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(store) => store.key_exists(key.into().as_bytes()).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => store.key_exists(key).await,
-            // SPDX-SnippetEnd
             InMemoryStore::Static(store) => Ok(match store.as_ref() {
                 StaticMemoryStore::Map(map) => map.get(key.into().as_str()).is_some(),
                 StaticMemoryStore::Set(set) => set.contains(key.into().as_str()),
@@ -388,16 +348,11 @@ impl InMemoryStore {
                     .try_lock(&KeyValue::<()>::build_key(prefix, key), duration)
                     .await
             }
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(store) => {
                 store
                     .try_lock(&KeyValue::<()>::build_key(prefix, key), duration)
                     .await
             }
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {
                 Err(trc::StoreEvent::NotSupported.into_err())
             }
@@ -491,12 +446,7 @@ impl InMemoryStore {
             }
             #[cfg(feature = "redis")]
             InMemoryStore::Redis(_) => {}
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             InMemoryStore::Sharded(_) => {}
-            // SPDX-SnippetEnd
             InMemoryStore::Static(_) | InMemoryStore::Http(_) => {}
         }
 
