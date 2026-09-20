@@ -506,22 +506,12 @@ impl ParseHttp for Server {
                     && req.method() == Method::GET
                     && path.next().unwrap_or_default() == "rsvp"
                 {
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
-                    if let Some(page) = self
-                        .core
-                        .enterprise
-                        .as_ref()
-                        .and_then(|e| e.template_scheduling_web.as_ref())
-                    {
+                    if let Some(page) = self.core.groupware.itip_http_rsvp_template.as_ref() {
                         return Ok(HttpResponse::new(StatusCode::OK)
                             .with_content_type("text/html; charset=utf-8")
                             .with_text_body(page.to_string())
                             .with_no_store());
                     }
-                    // SPDX-SnippetEnd
 
                     return Ok(HttpResponse::new(StatusCode::OK)
                         .with_content_type("text/html; charset=utf-8")
