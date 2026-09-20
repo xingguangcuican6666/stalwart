@@ -227,19 +227,14 @@ async fn store_maintenance(
                 .await
                 .caused_by(trc::location!())?;
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
+            // Clean-room AGPL: enforce telemetry retention. Spans and metric
+            // samples older than the configured hold period are purged; the
+            // periods come from the `DataRetention` settings.
             {
                 use common::telemetry::metrics::store::MetricsStore;
                 use common::telemetry::tracers::store::TracingStore;
 
-                if let Some(trace_retention) = server
-                    .core
-                    .enterprise
-                    .as_ref()
-                    .and_then(|e| e.trace_retention)
+                if let Some(trace_retention) = server.core.metrics.trace_period
                     && server.tracing_store().is_active()
                 {
                     server
@@ -249,11 +244,7 @@ async fn store_maintenance(
                         .caused_by(trc::location!())?;
                 }
 
-                if let Some(metrics_retention) = server
-                    .core
-                    .enterprise
-                    .as_ref()
-                    .and_then(|e| e.metrics_retention)
+                if let Some(metrics_retention) = server.core.metrics.history_period
                     && server.metrics_store().is_active()
                 {
                     server
@@ -263,7 +254,6 @@ async fn store_maintenance(
                         .caused_by(trc::location!())?;
                 }
             }
-            // SPDX-SnippetEnd
 
             trc::event!(
                 Store(StoreEvent::DataStorePurged),

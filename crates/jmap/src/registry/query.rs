@@ -75,6 +75,25 @@ impl RegistryQuery for Server {
             .await
             .and_then(|response| response.build()),
 
+            // Clean-room AGPL: telemetry read API.
+            ObjectType::Metric => super::mapping::telemetry::metric_query(RegistryQueryResponse {
+                server: self,
+                access_token,
+                object_type,
+                request,
+            })
+            .await
+            .and_then(|response| response.build()),
+
+            ObjectType::Trace => super::mapping::telemetry::trace_query(RegistryQueryResponse {
+                server: self,
+                access_token,
+                object_type,
+                request,
+            })
+            .await
+            .and_then(|response| response.build()),
+
             // SPDX-SnippetBegin
             // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
             // SPDX-License-Identifier: LicenseRef-SEL
@@ -89,26 +108,6 @@ impl RegistryQuery for Server {
                 .await
                 .and_then(|response| response.build())
             }
-
-            #[cfg(feature = "enterprise")]
-            ObjectType::Metric => super::mapping::telemetry::metric_query(RegistryQueryResponse {
-                server: self,
-                access_token,
-                object_type,
-                request,
-            })
-            .await
-            .and_then(|response| response.build()),
-
-            #[cfg(feature = "enterprise")]
-            ObjectType::Trace => super::mapping::telemetry::trace_query(RegistryQueryResponse {
-                server: self,
-                access_token,
-                object_type,
-                request,
-            })
-            .await
-            .and_then(|response| response.build()),
             // SPDX-SnippetEnd
             ObjectType::SpamTrainingSample => spam_sample_query(RegistryQueryResponse {
                 server: self,

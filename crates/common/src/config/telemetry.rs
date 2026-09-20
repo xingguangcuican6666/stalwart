@@ -17,11 +17,12 @@ use opentelemetry_semantic_conventions::resource::SERVICE_VERSION;
 use registry::schema::{
     enums::{EventPolicy, LogRotateFrequency},
     prelude::ObjectType,
-    structs::{self, EventTracingLevel, MetricsPrometheus, Tracer, WebHook},
+    structs::{self, DataRetention, EventTracingLevel, MetricsPrometheus, Tracer, WebHook},
 };
 use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
 use store::registry::bootstrap::Bootstrap;
 use trc::{EventType, Level, MetricType, TelemetryEvent, ipc::subscriber::Interests};
+use utils::cron::SimpleCron;
 
 #[derive(Debug)]
 pub struct TelemetrySubscriber {
@@ -40,12 +41,8 @@ pub enum TelemetrySubscriberType {
     Webhook(WebhookTracer),
     #[cfg(unix)]
     JournalTracer(crate::telemetry::tracers::journald::Subscriber),
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
+    // Clean-room AGPL: persist completed spans to the tracing store.
     StoreTracer(StoreTracer),
-    // SPDX-SnippetEnd
 }
 
 #[derive(Debug)]
@@ -92,16 +89,13 @@ pub struct WebhookTracer {
     pub client: reqwest::Client,
 }
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
+// Clean-room AGPL: destination stores for persisted spans. `store` holds the
+// serialized spans; `data` (when set) receives the reindex tasks.
 #[derive(Debug)]
-#[cfg(feature = "enterprise")]
 pub struct StoreTracer {
     pub store: store::Store,
     pub data: Option<store::Store>,
 }
-// SPDX-SnippetEnd
 
 #[derive(Debug)]
 pub enum RotationStrategy {
@@ -129,6 +123,13 @@ pub struct Metrics {
     pub prometheus: Option<PrometheusMetrics>,
     pub otel: Option<Arc<OtelMetrics>>,
     pub log_path: Option<String>,
+    // Clean-room AGPL: telemetry persistence retention/interval, sourced from
+    // the `DataRetention` settings object. `history_period` bounds how long
+    // stored metric samples are kept; `trace_period` bounds stored spans;
+    // `collection_interval` schedules the periodic metric snapshot writes.
+    pub history_period: Option<Duration>,
+    pub trace_period: Option<Duration>,
+    pub collection_interval: SimpleCron,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -402,12 +403,8 @@ impl Tracers {
                     TelemetrySubscriberType::JournalTracer(_) => {
                         EventType::Telemetry(TelemetryEvent::JournalError).into()
                     }
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
+                    // Clean-room AGPL: the store tracer excludes no events.
                     TelemetrySubscriberType::StoreTracer(_) => None,
-                    // SPDX-SnippetEnd
                 };
 
                 // Parse disabled events
@@ -431,12 +428,9 @@ impl Tracers {
                 }
             }
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-
-            // Parse tracing history
-            #[cfg(feature = "enterprise")]
+            // Clean-room AGPL: when a tracing store is configured, register a
+            // store tracer that persists completed spans. Reindex tasks go to
+            // the data store when it differs from the tracing store.
             if storage.tracing.is_active() {
                 let mut tracer = TelemetrySubscriber {
                     id: "history".to_string(),
@@ -456,7 +450,6 @@ impl Tracers {
 
                 tracers.push(tracer);
             }
-            // SPDX-SnippetEnd
 
             // Parse webhooks
             for hook in bp.list_infallible::<WebHook>().await {
@@ -588,6 +581,14 @@ impl Tracers {
 impl Metrics {
     pub async fn parse(bp: &mut Bootstrap) -> Self {
         let metrics = bp.setting_infallible::<structs::Metrics>().await;
+
+        // Clean-room AGPL: telemetry persistence retention/interval, read from
+        // the shared `DataRetention` settings object.
+        let data_retention = bp.setting_infallible::<DataRetention>().await;
+        let history_period = data_retention.hold_metrics_for.map(|d| d.into_inner());
+        let trace_period = data_retention.hold_traces_for.map(|d| d.into_inner());
+        let collection_interval: SimpleCron = data_retention.metrics_collection_interval.into();
+
         let resource = Resource::builder()
             .with_service_name("stalwart")
             .with_attribute(KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")))
@@ -703,6 +704,9 @@ impl Metrics {
                         None
                     }
                 }),
+            history_period,
+            trace_period,
+            collection_interval,
         }
     }
 }

@@ -40,11 +40,11 @@ enum Event {
     CalculateMetrics,
     TrainSpamClassifier,
     RenewNodeIdLease,
+    // Clean-room AGPL: periodic snapshot of in-process metrics to the store.
+    InternalMetrics,
     // SPDX-SnippetBegin
     // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
     // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
-    InternalMetrics,
     #[cfg(feature = "enterprise")]
     AlertMetrics,
     #[cfg(feature = "enterprise")]
@@ -129,6 +129,13 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
             // Calculate expensive metrics
             queue.schedule(Instant::now(), Event::CalculateMetrics);
 
+            // Clean-room AGPL: periodically snapshot in-process metrics to the
+            // metrics store, on the configured collection schedule.
+            queue.schedule(
+                Instant::now() + server.core.metrics.collection_interval.time_to_next(),
+                Event::InternalMetrics,
+            );
+
             // SPDX-SnippetBegin
             // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
             // SPDX-License-Identifier: LicenseRef-SEL
@@ -141,24 +148,14 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                     Event::RenewLicense,
                 );
 
-                queue.schedule(
-                    Instant::now() + enterprise.metrics_interval.time_to_next(),
-                    Event::InternalMetrics,
-                );
-
                 queue.schedule(Instant::now() + METRIC_ALERTS_INTERVAL, Event::AlertMetrics);
             }
 
             // SPDX-SnippetEnd
         }
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        // Metrics history
-        #[cfg(feature = "enterprise")]
+        // Clean-room AGPL: running state for cumulative metric deltas.
         let metrics_history = common::telemetry::metrics::store::SharedMetricHistory::default();
-        // SPDX-SnippetEnd
 
         let mut next_metric_update = Instant::now();
 
@@ -396,17 +393,13 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                         }
                     }
 
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
+                    // Clean-room AGPL: snapshot in-process metrics to the store.
                     Event::InternalMetrics => {
-                        if let Some(enterprise) = &server.core.enterprise {
-                            queue.schedule(
-                                Instant::now() + enterprise.metrics_interval.time_to_next(),
-                                Event::InternalMetrics,
-                            );
-                        }
+                        queue.schedule(
+                            Instant::now()
+                                + server.core.metrics.collection_interval.time_to_next(),
+                            Event::InternalMetrics,
+                        );
 
                         if server.core.storage.metrics.is_active() {
                             use common::telemetry::metrics::store::MetricsStore;
@@ -428,6 +421,9 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                         }
                     }
 
+                    // SPDX-SnippetBegin
+                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
+                    // SPDX-License-Identifier: LicenseRef-SEL
                     #[cfg(feature = "enterprise")]
                     Event::AlertMetrics => {
                         queue
@@ -571,11 +567,11 @@ impl Event {
             Event::CalculateMetrics => "calculateMetrics",
             Event::TrainSpamClassifier => "trainSpamClassifier",
             Event::RenewNodeIdLease => "renewNodeIdLease",
+            // Clean-room AGPL: periodic metrics snapshot.
+            Event::InternalMetrics => "internalMetrics",
             // SPDX-SnippetBegin
             // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <info@stalwartlabs.com>
             // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
-            Event::InternalMetrics => "internalMetrics",
             #[cfg(feature = "enterprise")]
             Event::AlertMetrics => "alertMetrics",
             #[cfg(feature = "enterprise")]

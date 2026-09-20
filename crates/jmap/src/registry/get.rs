@@ -349,6 +349,13 @@ impl RegistryGet for Server {
             | ObjectType::DmarcInternalReport
             | ObjectType::TlsInternalReport => report_get(get).await.map(|get| get.into_response()),
 
+            // Clean-room AGPL: telemetry read API.
+            ObjectType::Metric => crate::registry::mapping::telemetry::metric_get(get)
+                .await
+                .map(|get| get.into_response()),
+            ObjectType::Trace => crate::registry::mapping::telemetry::trace_get(get)
+                .await
+                .map(|get| get.into_response()),
             // SPDX-SnippetBegin
             // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
             // SPDX-License-Identifier: LicenseRef-SEL
@@ -358,14 +365,6 @@ impl RegistryGet for Server {
                     .await
                     .map(|get| get.into_response())
             }
-            #[cfg(feature = "enterprise")]
-            ObjectType::Metric => crate::registry::mapping::telemetry::metric_get(get)
-                .await
-                .map(|get| get.into_response()),
-            #[cfg(feature = "enterprise")]
-            ObjectType::Trace => crate::registry::mapping::telemetry::trace_get(get)
-                .await
-                .map(|get| get.into_response()),
             // SPDX-SnippetEnd
             ObjectType::SpamTrainingSample => {
                 spam_sample_get(get).await.map(|get| get.into_response())

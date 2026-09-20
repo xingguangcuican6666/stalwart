@@ -96,7 +96,7 @@ impl Telemetry {
 }
 
 impl TelemetrySubscriberType {
-    pub fn spawn(self, builder: SubscriberBuilder, is_enterprise: bool) {
+    pub fn spawn(self, builder: SubscriberBuilder, _is_enterprise: bool) {
         match self {
             TelemetrySubscriberType::ConsoleTracer(settings) => {
                 spawn_console_tracer(builder, settings)
@@ -108,15 +108,10 @@ impl TelemetrySubscriberType {
             TelemetrySubscriberType::JournalTracer(subscriber) => {
                 tracers::journald::spawn_journald_tracer(builder, subscriber)
             }
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
+            // Clean-room AGPL: persist completed spans to the tracing store.
             TelemetrySubscriberType::StoreTracer(subscriber) => {
-                if is_enterprise {
-                    tracers::store::spawn_store_tracer(builder, subscriber)
-                }
-            } // SPDX-SnippetEnd
+                tracers::store::spawn_store_tracer(builder, subscriber)
+            }
         }
     }
 }
