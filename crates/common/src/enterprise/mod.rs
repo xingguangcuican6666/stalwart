@@ -8,7 +8,6 @@
  *
  */
 
-pub mod alerts;
 pub mod config;
 pub mod license;
 pub mod llm;

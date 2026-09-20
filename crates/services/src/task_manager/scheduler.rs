@@ -42,11 +42,11 @@ enum Event {
     RenewNodeIdLease,
     // Clean-room AGPL: periodic snapshot of in-process metrics to the store.
     InternalMetrics,
+    // Clean-room AGPL: periodic evaluation of configured metric alerts.
+    AlertMetrics,
     // SPDX-SnippetBegin
     // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
     // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
-    AlertMetrics,
     #[cfg(feature = "enterprise")]
     RenewLicense,
     // SPDX-SnippetEnd
@@ -57,12 +57,8 @@ struct Queue {
     heap: BinaryHeap<Action>,
 }
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
+// Clean-room AGPL: how often configured metric alerts are evaluated.
 const METRIC_ALERTS_INTERVAL: Duration = Duration::from_secs(5 * 60);
-// SPDX-SnippetEnd
 
 pub fn spawn_task_scheduler(inner: Arc<Inner>) {
     tokio::spawn(async move {
@@ -141,14 +137,15 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
             // SPDX-License-Identifier: LicenseRef-SEL
 
             // Enterprise Edition license management
+            // Clean-room AGPL: evaluate configured metric alerts periodically.
+            queue.schedule(Instant::now() + METRIC_ALERTS_INTERVAL, Event::AlertMetrics);
+
             #[cfg(feature = "enterprise")]
             if let Some(enterprise) = &server.core.enterprise {
                 queue.schedule(
                     Instant::now() + enterprise.license.renew_in(),
                     Event::RenewLicense,
                 );
-
-                queue.schedule(Instant::now() + METRIC_ALERTS_INTERVAL, Event::AlertMetrics);
             }
 
             // SPDX-SnippetEnd
@@ -421,10 +418,8 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                         }
                     }
 
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
+                    // Clean-room AGPL: evaluate metric alerts and dispatch any
+                    // triggered notifications via the outbound queue.
                     Event::AlertMetrics => {
                         queue
                             .schedule(Instant::now() + METRIC_ALERTS_INTERVAL, Event::AlertMetrics);
@@ -449,6 +444,9 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                         });
                     }
 
+                    // SPDX-SnippetBegin
+                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
+                    // SPDX-License-Identifier: LicenseRef-SEL
                     #[cfg(feature = "enterprise")]
                     Event::RenewLicense => {
                         use common::ipc::RegistryChange;
@@ -569,11 +567,11 @@ impl Event {
             Event::RenewNodeIdLease => "renewNodeIdLease",
             // Clean-room AGPL: periodic metrics snapshot.
             Event::InternalMetrics => "internalMetrics",
+            // Clean-room AGPL: periodic metric-alert evaluation.
+            Event::AlertMetrics => "alertMetrics",
             // SPDX-SnippetBegin
             // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <info@stalwartlabs.com>
             // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
-            Event::AlertMetrics => "alertMetrics",
             #[cfg(feature = "enterprise")]
             Event::RenewLicense => "renewLicense",
             // SPDX-SnippetEnd

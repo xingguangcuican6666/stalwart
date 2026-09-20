@@ -10,5 +10,8 @@ pub mod prometheus;
 // Clean-room AGPL reimplementation (see store.rs); compiled unconditionally.
 pub mod store;
 
+// Clean-room AGPL reimplementation of metric alerts; compiled unconditionally.
+pub mod alerts;
+
 #[cfg(any(feature = "dev_mode", feature = "test_mode"))]
 pub mod test_data;

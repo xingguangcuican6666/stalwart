@@ -130,6 +130,10 @@ pub struct Metrics {
     pub history_period: Option<Duration>,
     pub trace_period: Option<Duration>,
     pub collection_interval: SimpleCron,
+    // Clean-room AGPL: metric alerts evaluated on each collection tick. Each
+    // entry pairs a compiled condition expression with the actions to take when
+    // it fires (see telemetry::metrics::alerts).
+    pub alerts: Vec<crate::telemetry::metrics::alerts::MetricAlert>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -597,6 +601,11 @@ impl Metrics {
             .with_version(env!("CARGO_PKG_VERSION"))
             .build();
 
+        // Clean-room AGPL: compile every enabled metric alert. The condition is
+        // compiled into an IfBlock (metric references bake into the AST), and
+        // the e-mail/event templates are tokenized for `%{metric}%` placeholders.
+        let alerts = Self::parse_alerts(bp).await;
+
         Metrics {
             prometheus: match metrics.prometheus {
                 MetricsPrometheus::Enabled(prom) => {
@@ -707,7 +716,67 @@ impl Metrics {
             history_period,
             trace_period,
             collection_interval,
+            alerts,
         }
+    }
+
+    async fn parse_alerts(bp: &mut Bootstrap) -> Vec<crate::telemetry::metrics::alerts::MetricAlert> {
+        use crate::expr::if_block::BootstrapExprExt;
+        use crate::telemetry::metrics::alerts::{
+            AlertContent, AlertMethod, MetricAlert,
+        };
+        use registry::schema::structs::{Alert, AlertEmail, AlertEvent};
+
+        let mut alerts = Vec::new();
+
+        for alert in bp.list_infallible::<Alert>().await {
+            let id = alert.id;
+            let alert = alert.object;
+            if !alert.enable {
+                continue;
+            }
+
+            // Collect the configured delivery methods. An alert with no enabled
+            // method would never do anything, so skip it entirely.
+            let mut method = Vec::new();
+
+            if let AlertEmail::Enabled(email) = &alert.email_alert {
+                method.push(AlertMethod::Email {
+                    from_name: email.from_name.clone(),
+                    from_addr: email.from_address.clone(),
+                    to: email.to.iter().map(|rcpt| rcpt.to_string()).collect(),
+                    subject: AlertContent::parse(&email.subject),
+                    body: AlertContent::parse(&email.body),
+                });
+            }
+
+            if let AlertEvent::Enabled(event) = &alert.event_alert {
+                method.push(AlertMethod::Event {
+                    message: event
+                        .event_message
+                        .as_ref()
+                        .map(|msg| AlertContent::parse(msg)),
+                });
+            }
+
+            if method.is_empty() {
+                continue;
+            }
+
+            // Compile the condition; metric references bake into the AST.
+            let condition = bp.compile_expr(id, &alert.ctx_condition());
+            if condition.is_empty() {
+                continue;
+            }
+
+            alerts.push(MetricAlert {
+                id,
+                condition,
+                method,
+            });
+        }
+
+        alerts
     }
 }
 
