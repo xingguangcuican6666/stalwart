@@ -7,12 +7,14 @@
 use calcard::vcard::VCardVersion;
 use registry::schema::{
     enums::VCardVersion as RegistryVCardVersion,
+    prelude::{ObjectType, Property},
     structs::{
         AddressBook, Calendar, CalendarAlarm, CalendarScheduling, DataRetention, FileStorage,
         Sharing, SystemSettings, WebDav,
     },
 };
 use std::str::FromStr;
+use std::sync::Arc;
 use store::registry::bootstrap::Bootstrap;
 use utils::template::Template;
 
@@ -45,6 +47,7 @@ pub struct GroupwareConfig {
     pub itip_outbound_max_recipients: usize,
     pub itip_http_rsvp_url: Option<String>,
     pub itip_http_rsvp_expiration: u64,
+    pub itip_http_rsvp_template: Option<Arc<str>>,
     pub itip_inbox_auto_expunge: Option<u64>,
     pub itip_template: Template<CalendarTemplateVariable>,
 
@@ -126,11 +129,16 @@ impl GroupwareConfig {
             alarms_allow_external_recipients: alarm.allow_external_rcpts,
             alarms_from_name: alarm.from_name,
             alarms_from_email: alarm.from_email,
-            alarms_template: Template::parse(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../resources/html-templates/calendar-alarm.html.min"
-            )))
-            .expect("Failed to parse calendar template"),
+            alarms_template: parse_template_or_default(
+                bp,
+                alarm.template.as_deref(),
+                ObjectType::CalendarAlarm.singleton(),
+                Property::Template,
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../resources/html-templates/calendar-alarm.html.min"
+                )),
+            ),
             itip_enabled: sched.enable,
             itip_auto_add: sched.auto_add_invitations,
             itip_inbound_max_ical_size: sched.itip_max_size as usize,
@@ -155,12 +163,47 @@ impl GroupwareConfig {
             max_shares_per_item: share.max_shares as usize,
             allow_directory_query: share.allow_directory_queries,
             itip_http_rsvp_expiration: sched.http_rsvp_link_expiry.into_inner().as_secs(),
-            itip_template: Template::parse(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../resources/html-templates/calendar-invite.html.min"
-            )))
-            .expect("Failed to parse calendar template"),
+            itip_http_rsvp_template: sched
+                .http_rsvp_template
+                .as_deref()
+                .map(|page| page.trim())
+                .filter(|page| !page.is_empty())
+                .map(Arc::from),
+            itip_template: parse_template_or_default(
+                bp,
+                sched.email_template.as_deref(),
+                ObjectType::CalendarScheduling.singleton(),
+                Property::EmailTemplate,
+                include_str!(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../resources/html-templates/calendar-invite.html.min"
+                )),
+            ),
         }
+    }
+}
+
+/// Parses an operator-supplied calendar template, falling back to the shipped
+/// default when none is configured or the custom template fails to parse.
+fn parse_template_or_default(
+    bp: &mut Bootstrap,
+    custom: Option<&str>,
+    object: registry::types::id::ObjectId,
+    property: Property,
+    default: &str,
+) -> Template<CalendarTemplateVariable> {
+    let default_template =
+        || Template::parse(default).expect("Failed to parse built-in calendar template");
+
+    match custom.map(|t| t.trim()).filter(|t| !t.is_empty()) {
+        Some(template) => match Template::parse(template) {
+            Ok(template) => template,
+            Err(err) => {
+                bp.invalid_property(object, property, format!("Invalid template: {err}"));
+                default_template()
+            }
+        },
+        None => default_template(),
     }
 }
 

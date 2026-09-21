@@ -75,14 +75,8 @@ impl Server {
             }
         }
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-
-        #[cfg(feature = "enterprise")]
-        if self.is_enterprise_edition()
-            && let Cow::Borrowed(addr) = &local_part
-            && let Some(masked_id) = crate::enterprise::masked::MaskedAddress::parse(addr)
+        if let Cow::Borrowed(addr) = &local_part
+            && let Some(masked_id) = crate::masked::MaskedAddress::parse(addr)
             && let Some(masked_entry) = self
                 .registry()
                 .object::<MaskedEmail>(Id::new(masked_id))
@@ -108,7 +102,6 @@ impl Server {
                 Ok(RcptResolution::UnknownRecipient)
             };
         }
-        // SPDX-SnippetEnd
 
         // Obtain external directory, if configured
         let directory = self

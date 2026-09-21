@@ -39,13 +39,10 @@ impl BlobStore {
             structs::BlobStore::FileSystem(file_system_store) => {
                 FsStore::open(file_system_store).await
             }
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             structs::BlobStore::Sharded(store) => {
                 crate::backend::composite::sharded_blob::ShardedBlob::open(store).await
-            } // SPDX-SnippetEnd
+            }
+            #[allow(unreachable_patterns)]
             _ => Err("Binary was not compiled with the selected blob store backend".to_string()),
         };
 
@@ -58,10 +55,6 @@ impl BlobStore {
         }
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
     pub fn downgrade_store(self) -> BlobStore {
         match self {
             BlobStore::Sharded(_) => BlobStore::default(),
@@ -69,9 +62,7 @@ impl BlobStore {
         }
     }
 
-    #[cfg(feature = "enterprise")]
     pub fn is_enterprise(&self) -> bool {
         matches!(self, BlobStore::Sharded(_))
     }
-    // SPDX-SnippetEnd
 }

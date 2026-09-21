@@ -3326,7 +3326,6 @@ dependencies = [
  "percent-encoding",
  "registry",
  "rkyv",
- "scim",
  "serde",
  "serde_json",
  "services",
@@ -3666,21 +3665,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4c887fc7d4c297cf3f9436864af9e3dba7f8be9415a6c2a7f392f3b1636298c"
 
 [[package]]
-name = "icu_locale"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "785f595c61ef57169a467eeed7b4b6936a66f6cacbb116a96ee86da983251bf4"
-dependencies = [
- "icu_collections",
- "icu_locale_core",
- "icu_locale_data",
- "icu_locale_fallback",
- "icu_provider",
- "tinystr",
- "zerovec",
-]
-
-[[package]]
 name = "icu_locale_core"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3693,12 +3677,6 @@ dependencies = [
  "writeable",
  "zerovec",
 ]
-
-[[package]]
-name = "icu_locale_data"
-version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d37d91460e362a5cf58907cd7ce871411775ee6294e49a5cc8e6cec16dfa75ea"
 
 [[package]]
 name = "icu_locale_fallback"
@@ -7352,37 +7330,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scim"
-version = "0.16.23"
-dependencies = [
- "common",
- "directory",
- "http_proto",
- "hyper",
- "icu_locale",
- "jmap",
- "jmap_proto",
- "registry",
- "scim-proto",
- "serde",
- "serde_json",
- "store",
- "trc",
- "types",
- "utils",
- "xxhash-rust",
-]
-
-[[package]]
-name = "scim-proto"
-version = "0.16.23"
-dependencies = [
- "hashify",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8234,7 +8181,6 @@ dependencies = [
  "pop3",
  "registry",
  "rustls",
- "scim",
  "services",
  "smtp",
  "smtp-proto",
@@ -8562,8 +8508,6 @@ dependencies = [
  "rust-s3",
  "rustls",
  "rustls-pki-types",
- "scim",
- "scim-proto",
  "serde",
  "serde_json",
  "serial_test",

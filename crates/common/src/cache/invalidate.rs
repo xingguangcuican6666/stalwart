@@ -288,12 +288,8 @@ impl Server {
                                     linked_object.id().document_id(),
                                 ));
                             }
-                            // SPDX-SnippetBegin
-                            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                            // SPDX-License-Identifier: LicenseRef-SEL
-                            #[cfg(feature = "enterprise")]
                             ObjectType::Tenant => {
-                                // Invalidate all accounts of the tenant
+                                // Invalidate the tenant and all of its accounts.
                                 let tenant_id = linked_object.id().document_id();
                                 changes.insert(CacheInvalidation::Tenant(tenant_id));
                                 for account_id in self
@@ -307,7 +303,6 @@ impl Server {
                                     changes.insert(CacheInvalidation::AccessToken(account_id));
                                 }
                             }
-                            // SPDX-SnippetEnd
                             ObjectType::Role => {
                                 role_ids.push(linked_object.id().document_id());
                             }

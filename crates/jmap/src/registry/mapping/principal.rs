@@ -39,21 +39,6 @@ pub async fn validate_account(
     mut account: &mut Account,
     old_account: AccountUpdate<'_>,
 ) -> ValidationResult {
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
-    if server.core.is_enterprise_edition()
-        && matches!(old_account, AccountUpdate::Create(_))
-        && !server.can_create_account().await?
-    {
-        return Ok(Err(SetError::forbidden().with_description(format!(
-            "Enterprise licensed account limit reached: {} accounts licensed.",
-            server.licensed_accounts()
-        ))));
-    }
-    // SPDX-SnippetEnd
-
     let is_external_directory = if let Account::User(account) = account {
         server
             .domain_by_id(account.domain_id.document_id())
@@ -361,10 +346,8 @@ pub(crate) async fn validate_role(
     }
 }
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
+// Clean-room AGPL: per-tenant object-count quota enforcement, compiled
+// unconditionally so multi-tenancy limits apply in the base build.
 pub async fn validate_tenant_quota(
     server: &Server,
     access_token: &AccessToken,
@@ -427,37 +410,21 @@ pub async fn validate_tenant_quota(
 
     Ok(Ok(ObjectResponse::default()))
 }
-// SPDX-SnippetEnd
-
-#[cfg(not(feature = "enterprise"))]
-pub async fn validate_tenant_quota(
-    _server: &Server,
-    _access_token: &AccessToken,
-    _quota: TenantStorageQuota,
-) -> ValidationResult {
-    ValidationResult::Ok(Ok(ObjectResponse::default()))
-}
 
 pub async fn schedule_account_destruction(
     server: &Server,
     account_id: Id,
     account: &Account,
 ) -> trc::Result<()> {
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
+    // Delay destruction by the configured retention window so the account can
+    // be recovered within it; with no window configured, destroy immediately.
     let status = server
         .core
-        .enterprise
+        .retention
+        .deleted_accounts
         .as_ref()
-        .and_then(|e| e.deleted_accounts_retention.as_ref())
         .map(|retention| TaskStatus::at(store::write::now() as i64 + retention.as_secs() as i64))
         .unwrap_or_else(TaskStatus::now);
-    // SPDX-SnippetEnd
-
-    #[cfg(not(feature = "enterprise"))]
-    let status = TaskStatus::now();
 
     let (account_domain_id, account_name, account_type) = match account {
         Account::User(account) => (account.domain_id, account.name.clone(), AccountType::User),

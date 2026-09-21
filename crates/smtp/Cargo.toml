@@ -46,7 +46,6 @@ base64 = "0.23"
 
 [features]
 test_mode = ["mail-auth/test"]
-enterprise = []
 
 #[[bench]]
 #name = "hash"

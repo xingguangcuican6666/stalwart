@@ -64,42 +64,30 @@ impl Server {
                 .caused_by(trc::location!())?
         }
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
+        // When the account belongs to a tenant, its effective permissions may
+        // not exceed the ceiling the tenant itself grants. Build that ceiling
+        // from the tenant's explicit permission set and/or its assigned roles,
+        // then intersect the account permissions with it.
+        if let Some(tenant_id) = tenant_id {
+            let tenant = self.tenant(tenant_id).await.caused_by(trc::location!())?;
 
-        #[cfg(feature = "enterprise")]
-        {
-            if let Some(tenant_id) = tenant_id {
-                if self.is_enterprise_edition() {
-                    // Limit tenant permissions
-                    let tenant = self.tenant(tenant_id).await.caused_by(trc::location!())?;
-                    let (mut tenant_permissions, tenant_roles) =
-                        if let Some(permissions) = &tenant.permissions {
-                            if permissions.merge {
-                                ((**permissions).clone(), tenant.id_roles.as_slice())
-                            } else {
-                                ((**permissions).clone(), &[][..])
-                            }
-                        } else {
-                            (PermissionsGroup::default(), tenant.id_roles.as_slice())
-                        };
-                    if !tenant_roles.is_empty() {
-                        tenant_permissions = self
-                            .add_role_permissions(tenant_permissions, tenant_roles.iter().copied())
-                            .await
-                            .caused_by(trc::location!())?
-                    }
+            // An explicit permission set forms the base; when it opts to merge
+            // (or when there is no explicit set) the tenant's roles are folded
+            // in as well.
+            let (mut ceiling, fold_roles) = match tenant.permissions.as_deref() {
+                Some(explicit) => (explicit.clone(), explicit.merge),
+                None => (PermissionsGroup::default(), true),
+            };
 
-                    permissions.restrict(&tenant_permissions);
-                } else {
-                    // Enterprise edition downgrade, remove any tenant administrator permissions
-                    permissions.restrict(&PermissionsGroup::user());
-                }
+            if fold_roles && !tenant.id_roles.is_empty() {
+                ceiling = self
+                    .add_role_permissions(ceiling, tenant.id_roles.iter().copied())
+                    .await
+                    .caused_by(trc::location!())?;
             }
-        }
 
-        // SPDX-SnippetEnd
+            permissions.restrict(&ceiling);
+        }
 
         Ok(permissions)
     }

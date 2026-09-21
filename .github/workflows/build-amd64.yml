@@ -1,0 +1,82 @@
+name: "Build amd64 image"
+
+# Builds the community-edition amd64 image (Dockerfile.ce) — the AGPL base
+# with the clean-room telemetry work, without the enterprise feature — and
+# pushes it to GitHub Container Registry.
+
+on:
+  workflow_dispatch:
+    inputs:
+      features:
+        description: "Cargo feature set (no enterprise)"
+        required: false
+        default: "rocks"
+        type: string
+      push:
+        description: "Push image to GHCR"
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches:
+      - "feature/amd64-image"
+      - "ce-build"
+    tags:
+      - "ce-v*"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build amd64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        # Skip login for manual runs that opt out of pushing.
+        if: github.event_name != 'workflow_dispatch' || inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+            type=raw,value=ce-latest,enable={{is_default_branch}}
+
+      - name: Build and push amd64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.ce
+          platforms: linux/amd64
+          build-args: |
+            FEATURES=${{ inputs.features || 'rocks' }}
+          push: ${{ github.event_name != 'workflow_dispatch' || inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

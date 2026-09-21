@@ -26,12 +26,8 @@ impl Store {
             #[cfg(feature = "rocks")]
             Self::RocksDb(_) => "rocksdb",
             Self::Ephemeral(_) => "ephemeral",
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+            #[cfg(any(feature = "postgres", feature = "mysql"))]
             Self::SQLReadReplica(_) => "read_replica",
-            // SPDX-SnippetEnd
             Self::None => "none",
         }
     }

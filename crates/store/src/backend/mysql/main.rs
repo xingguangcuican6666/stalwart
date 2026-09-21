@@ -69,14 +69,11 @@ impl MysqlStore {
             conn_pool: Pool::new(opts),
         }));
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
         if !replicas.is_empty() {
-            return backend::composite::read_replica::SQLReadReplica::open(primary, replicas);
+            return crate::backend::composite::read_replica::SQLReadReplica::open(
+                primary, replicas,
+            );
         }
-        // SPDX-SnippetEnd
 
         Ok(primary)
     }

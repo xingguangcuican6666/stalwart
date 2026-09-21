@@ -50,29 +50,6 @@ impl Server {
                             .ctx(trc::Key::AccountName, account.email.clone())
                             .ctx(trc::Key::AccountId, account_id)
                     })?;
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                if domain.allows_scim_provisioning() && self.core.is_enterprise_edition() {
-                    return Account::from(current_account)
-                        .into_user()
-                        .map(|account| AccountWithId {
-                            id: account_id,
-                            account: Account::User(account),
-                        })
-                        .ok_or_else(|| {
-                            trc::AuthEvent::Error
-                                .into_err()
-                                .details(
-                                    "Account ID from directory does not correspond to a user account",
-                                )
-                                .ctx(trc::Key::AccountName, account.email.clone())
-                                .ctx(trc::Key::AccountId, account_id)
-                        });
-                }
-                // SPDX-SnippetEnd
-
                 let mut updated_account = Account::from(current_account.clone())
                     .into_user()
                     .ok_or_else(|| {
@@ -177,21 +154,6 @@ impl Server {
                 }
             }
             None => {
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                if domain.allows_scim_provisioning() && self.core.is_enterprise_edition() {
-                    return Err(trc::AuthEvent::Error
-                        .into_err()
-                        .details(concat!(
-                            "Accounts in this domain are provisioned through SCIM, ",
-                            "just-in-time provisioning is disabled"
-                        ))
-                        .ctx(trc::Key::Domain, domain.name().to_string()));
-                }
-                // SPDX-SnippetEnd
-
                 let mut aliases = Vec::with_capacity(account.email_aliases.len());
                 for alias in account.email_aliases {
                     if let Some((local, alias_domain)) = self.validate_alias(&alias).await?
@@ -239,17 +201,6 @@ impl Server {
                     })),
                     ..Default::default()
                 }));
-
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                if self.core.is_enterprise_edition() && !self.can_create_account().await? {
-                    return Err(trc::AuthEvent::Error.into_err().details(
-                        "Account creation not possible: license key account limit reached",
-                    ));
-                }
-                // SPDX-SnippetEnd
 
                 match self
                     .registry()
@@ -300,28 +251,6 @@ impl Server {
                             .ctx(trc::Key::AccountName, group.email.clone())
                             .ctx(trc::Key::AccountId, account_id)
                     })?;
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                if domain.allows_scim_provisioning() && self.core.is_enterprise_edition() {
-                    return if matches!(
-                        &current_account.inner,
-                        registry::schema::prelude::ObjectInner::Account(Account::Group(_))
-                    ) {
-                        Ok(account_id)
-                    } else {
-                        Err(trc::AuthEvent::Error
-                            .into_err()
-                            .details(
-                                "Account ID from directory does not correspond to a group account",
-                            )
-                            .ctx(trc::Key::AccountName, group.email.clone())
-                            .ctx(trc::Key::AccountId, account_id))
-                    };
-                }
-                // SPDX-SnippetEnd
-
                 let mut updated_account = Account::from(current_account.clone())
                     .into_group()
                     .ok_or_else(|| {
@@ -389,21 +318,6 @@ impl Server {
                 }
             }
             None => {
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                if domain.allows_scim_provisioning() && self.core.is_enterprise_edition() {
-                    return Err(trc::AuthEvent::Error
-                        .into_err()
-                        .details(concat!(
-                            "Groups in this domain are provisioned through SCIM, ",
-                            "just-in-time provisioning is disabled"
-                        ))
-                        .ctx(trc::Key::Domain, domain.name().to_string()));
-                }
-                // SPDX-SnippetEnd
-
                 let mut aliases = Vec::with_capacity(group.email_aliases.len());
                 for alias in group.email_aliases {
                     if let Some((local, alias_domain)) = self.validate_alias(&alias).await?
@@ -432,17 +346,6 @@ impl Server {
                     roles: Roles::Default,
                     ..Default::default()
                 }));
-
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                if self.core.is_enterprise_edition() && !self.can_create_account().await? {
-                    return Err(trc::AuthEvent::Error.into_err().details(
-                        "Account creation not possible: license key account limit reached",
-                    ));
-                }
-                // SPDX-SnippetEnd
 
                 match self
                     .registry()

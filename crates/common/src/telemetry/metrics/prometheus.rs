@@ -16,14 +16,7 @@ impl Server {
     pub async fn export_prometheus_metrics(&self) -> trc::Result<String> {
         let mut metrics = Vec::new();
 
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
-        let is_enterprise = self.is_enterprise_edition();
-        // SPDX-SnippetEnd
-
-        #[cfg(not(feature = "enterprise"))]
+        // Enterprise-only metrics are not part of the AGPL base.
         let is_enterprise = false;
 
         // Add counters

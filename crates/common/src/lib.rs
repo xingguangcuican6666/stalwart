@@ -66,20 +66,12 @@ pub mod expr;
 pub mod i18n;
 pub mod ipc;
 pub mod manager;
+pub mod masked;
 pub mod network;
 pub mod scripts;
 pub mod sharing;
 pub mod storage;
 pub mod telemetry;
-
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-
-#[cfg(feature = "enterprise")]
-pub mod enterprise;
-
-// SPDX-SnippetEnd
 
 pub use psl;
 
@@ -381,15 +373,11 @@ pub struct Core {
     pub imap: ImapConfig,
     pub smtp: SmtpConfig,
     pub spam: SpamFilterConfig,
+    pub ai: crate::config::mailstore::ai::AiConfig,
     pub groupware: GroupwareConfig,
     pub metrics: Metrics,
-
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
-    pub enterprise: Option<enterprise::Enterprise>,
-    // SPDX-SnippetEnd
+    pub branding: crate::config::branding::BrandingConfig,
+    pub retention: crate::config::retention::RetentionConfig,
 }
 
 pub trait BuildServer {

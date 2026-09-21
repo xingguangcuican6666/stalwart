@@ -153,16 +153,8 @@ impl BootManager {
                 let data = Data::parse(&mut bootstrap).await;
                 let cache = Caches::parse(&mut bootstrap).await;
 
-                // Enable telemetry
-
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                telemetry.enable(core.is_enterprise_edition());
-                // SPDX-SnippetEnd
-
-                #[cfg(not(feature = "enterprise"))]
+                // Enable telemetry. Enterprise-only telemetry is not part of
+                // the AGPL base.
                 telemetry.enable(false);
 
                 if bootstrap.registry.is_bootstrap_mode() {

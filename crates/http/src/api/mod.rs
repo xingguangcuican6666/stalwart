@@ -4,12 +4,6 @@
  * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL
  */
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
-pub mod telemetry;
-// SPDX-SnippetEnd
 pub mod diagnose;
 
 use crate::{
@@ -133,50 +127,6 @@ impl ManagementApi for Server {
                 let access_token = self.management_access_token(req, session).await?;
                 let account_id = access_token.account_id();
                 match path.get(1).copied() {
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
-                    Some("tracing") if self.core.is_enterprise_edition() => {
-                        // Validate the access token
-                        access_token.enforce_permission(Permission::LiveTracing)?;
-
-                        // Issue a live telemetry token valid for 60 seconds
-                        Ok(HttpResponse::new(StatusCode::OK)
-                            .with_no_cache()
-                            .with_text_body(
-                                self.encode_access_token(
-                                    GrantType::LiveTracing,
-                                    account_id,
-                                    self.account(account_id).await?.name(),
-                                    60,
-                                    None,
-                                    None,
-                                )
-                                .await?,
-                            ))
-                    }
-                    #[cfg(feature = "enterprise")]
-                    Some("metrics") if self.core.is_enterprise_edition() => {
-                        // Validate the access token
-                        access_token.enforce_permission(Permission::LiveMetrics)?;
-
-                        // Issue a live telemetry token valid for 60 seconds
-                        Ok(HttpResponse::new(StatusCode::OK)
-                            .with_no_cache()
-                            .with_text_body(
-                                self.encode_access_token(
-                                    GrantType::LiveMetrics,
-                                    account_id,
-                                    self.account(account_id).await?.name(),
-                                    60,
-                                    None,
-                                    None,
-                                )
-                                .await?,
-                            ))
-                    }
-                    // SPDX-SnippetEnd
                     Some("delivery") => {
                         // Validate the access token
                         access_token.enforce_permission(Permission::LiveDeliveryTest)?;
@@ -242,24 +192,6 @@ impl ManagementApi for Server {
                                 },
                             ))))
                     }
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
-                    ("tracing", _, &Method::GET) if self.core.is_enterprise_edition() => {
-                        use crate::api::telemetry::TelemetryApi;
-
-                        self.handle_telemetry_api_request(req, true, &access_token)
-                            .await
-                    }
-                    #[cfg(feature = "enterprise")]
-                    ("metrics", _, &Method::GET) if self.core.is_enterprise_edition() => {
-                        use crate::api::telemetry::TelemetryApi;
-
-                        self.handle_telemetry_api_request(req, false, &access_token)
-                            .await
-                    }
-                    // SPDX-SnippetEnd
                     ("tracing" | "metrics", _, &Method::GET) => {
                         Err(trc::ResourceEvent::NotFound
                             .ctx(trc::Key::Details, "Enterprise feature"))
@@ -282,28 +214,9 @@ impl ManagementApi for Server {
             let grant = if path.starts_with("/api/live/delivery") {
                 Some((GrantType::LiveDelivery, Permission::LiveDeliveryTest))
             } else {
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
-                {
-                    if self.core.is_enterprise_edition() {
-                        if path.starts_with("/api/live/tracing") {
-                            Some((GrantType::LiveTracing, Permission::LiveTracing))
-                        } else if path.starts_with("/api/live/metrics") {
-                            Some((GrantType::LiveMetrics, Permission::LiveMetrics))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                }
-                // SPDX-SnippetEnd
-                #[cfg(not(feature = "enterprise"))]
-                {
-                    None
-                }
+                // Live tracing/metrics grants are enterprise-only and not part
+                // of the AGPL base.
+                None
             };
 
             if let Some((grant_type, permission)) = grant {

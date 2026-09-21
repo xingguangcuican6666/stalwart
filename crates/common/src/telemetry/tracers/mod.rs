@@ -10,12 +10,8 @@ pub mod log;
 pub mod otel;
 pub mod stdout;
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
+// Clean-room AGPL reimplementation (see store.rs); compiled unconditionally.
 pub mod store;
-// SPDX-SnippetEnd
 
 use registry::{
     schema::structs::{

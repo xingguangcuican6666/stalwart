@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1
+# check=skip=FromPlatformFlagConstDisallowed,RedundantTargetPlatform
+
+# Community-edition amd64 image.
+#
+# Builds the `stalwart` binary WITHOUT the `enterprise` feature, so the tree
+# compiles cleanly against the AGPL base (the enterprise/SEL modules and their
+# license gates are excluded). The clean-room telemetry persistence work is
+# compiled unconditionally into this base, so metrics/traces storage is present
+# here without the enterprise feature.
+#
+# amd64-only and built natively (CI runs on an amd64 runner), which avoids the
+# cross-compile / zig machinery of Dockerfile.build.
+
+# *****************
+# Builder
+# *****************
+FROM rust:slim-trixie AS builder
+WORKDIR /build
+
+ENV DEBIAN_FRONTEND="noninteractive" \
+    CARGO_TERM_COLOR=always \
+    CARGO_NET_RETRY=10 \
+    CARGO_NET_GIT_FETCH_WITH_CLI=true \
+    AWS_LC_SYS_PREBUILT_NASM=1
+
+# RocksDB (via librocksdb-sys) and aws-lc-sys need a C/C++ toolchain and
+# libclang for bindgen; ca-certificates is required for crates.io over HTTPS.
+# git is required because Cargo.toml pulls some dependencies from git
+# repositories and CARGO_NET_GIT_FETCH_WITH_CLI=true makes cargo shell out to
+# the git CLI to fetch them.
+RUN apt-get update && \
+    apt-get install -yq --no-install-recommends \
+        build-essential libclang-19-dev ca-certificates git && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY . .
+
+# Feature set: the upstream storage backends minus `enterprise` — embedded
+# RocksDB plus external SQL (SQLite/Postgres/MySQL), object storage (S3),
+# cache/coordination (Redis), Azure blob and NATS. Verified to compile without
+# the enterprise feature. Override with --build-arg FEATURES=... to trim it.
+ARG FEATURES="sqlite postgres mysql rocks s3 redis azure nats"
+RUN cargo build --release -p stalwart --no-default-features --features "${FEATURES}"
+
+# *****************
+# Runtime image
+# *****************
+FROM docker.io/debian:trixie-slim
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -yq --no-install-recommends ca-certificates curl tzdata libcap2-bin && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r -g 2000 stalwart && \
+    useradd -r -u 2000 -g 2000 -s /usr/sbin/nologin -M stalwart && \
+    mkdir -p /etc/stalwart /var/lib/stalwart && \
+    chown stalwart:stalwart /etc/stalwart /var/lib/stalwart
+COPY --from=builder --chmod=0755 /build/target/release/stalwart /usr/local/bin/stalwart
+RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/stalwart
+USER stalwart
+WORKDIR /var/lib/stalwart
+VOLUME ["/etc/stalwart", "/var/lib/stalwart"]
+EXPOSE	443 25 110 587 465 143 993 995 4190 8080
+ENV STALWART_HEALTHCHECK_URL=https://127.0.0.1:443/healthz/live
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsSk -H "X-Forwarded-For: 127.0.0.1" "$STALWART_HEALTHCHECK_URL" || curl -fsS -H "X-Forwarded-For: 127.0.0.1" http://127.0.0.1:8080/healthz/live || exit 1
+ENTRYPOINT ["/usr/local/bin/stalwart"]
+CMD ["--config", "/etc/stalwart/config.json"]

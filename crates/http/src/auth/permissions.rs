@@ -35,19 +35,7 @@ impl AccountApiHandler for Server {
         &self,
         access_token: &AccessToken,
     ) -> trc::Result<HttpResponse> {
-        #[cfg(not(feature = "enterprise"))]
         let edition = "oss";
-
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
-        let edition = if self.core.is_enterprise_edition() {
-            "enterprise"
-        } else {
-            "community"
-        };
-        // SPDX-SnippetEnd
 
         let account_info = self.account_info(access_token.account_id()).await?;
         let is_external_directory = if let Some(domain_name) = account_info.name().try_domain_part()

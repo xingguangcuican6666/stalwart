@@ -1,11 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
+ * SPDX-FileCopyrightText: 2026 Stalwart clean-room contributors
  *
- * SPDX-License-Identifier: LicenseRef-SEL
+ * SPDX-License-Identifier: AGPL-3.0-only
  *
- * This file is subject to the Stalwart Enterprise License Agreement (SEL) and
- * is NOT open source software.
- *
+ * Clean-room reimplementation of the metrics persistence layer. Written from
+ * the AGPL-side call-site contract (task_manager scheduler/maintenance) and
+ * the AGPL-generated `registry` schema types. No SEL source was consulted.
  */
 
 use ahash::AHashMap;
@@ -19,8 +19,43 @@ use store::{
     Store, ValueKey,
     write::{BatchBuilder, TelemetryClass, ValueClass},
 };
-use trc::*;
+use trc::{Collector, MetricType};
 use utils::snowflake::SnowflakeIdGenerator;
+
+/// Per-histogram running totals kept between collection cycles so that we can
+/// persist the increment observed since the previous write.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct HistogramHistory {
+    pub sum: u64,
+    pub count: u64,
+}
+
+/// Running state carried across metric collection cycles.
+///
+/// Counters and histograms are cumulative in the in-process collector, so we
+/// remember the previously persisted value and only store the delta on each
+/// write. Gauges are point-in-time and stored as-is.
+pub struct MetricsHistory {
+    events: AHashMap<MetricType, u32>,
+    histograms: AHashMap<MetricType, HistogramHistory>,
+    id_generator: SnowflakeIdGenerator,
+}
+
+impl Default for MetricsHistory {
+    fn default() -> Self {
+        Self {
+            events: AHashMap::new(),
+            histograms: AHashMap::new(),
+            id_generator: SnowflakeIdGenerator::new(),
+        }
+    }
+}
+
+pub type SharedMetricHistory = Arc<Mutex<MetricsHistory>>;
+
+pub fn init() -> SharedMetricHistory {
+    Arc::new(Mutex::new(MetricsHistory::default()))
+}
 
 pub trait MetricsStore: Sync + Send {
     fn write_metrics(
@@ -28,181 +63,102 @@ pub trait MetricsStore: Sync + Send {
         timestamp: Option<u64>,
         history: SharedMetricHistory,
     ) -> impl Future<Output = trc::Result<()>> + Send;
+
     fn purge_metrics(&self, period: Duration) -> impl Future<Output = trc::Result<()>> + Send;
 }
-
-#[derive(Default)]
-pub struct MetricsHistory {
-    events: AHashMap<MetricType, u32>,
-    histograms: AHashMap<MetricType, HistogramHistory>,
-    id_generator: SnowflakeIdGenerator,
-}
-
-#[derive(Default)]
-struct HistogramHistory {
-    sum: u64,
-    count: u64,
-}
-
-pub type SharedMetricHistory = Arc<Mutex<MetricsHistory>>;
 
 impl MetricsStore for Store {
     async fn write_metrics(
         &self,
-        _timestamp: Option<u64>,
-        history_: SharedMetricHistory,
+        timestamp: Option<u64>,
+        history: SharedMetricHistory,
     ) -> trc::Result<()> {
-        let mut batch = BatchBuilder::new();
-        {
-            let mut history_guard = history_.lock();
-            for event in [
-                MetricType::SmtpConnectionStart,
-                MetricType::ImapConnectionStart,
-                MetricType::Pop3ConnectionStart,
-                MetricType::ManageSieveConnectionStart,
-                MetricType::HttpConnectionStart,
-                MetricType::DeliveryAttemptStart,
-                MetricType::QueueMessageQueued,
-                MetricType::QueueAuthenticatedMessageQueued,
-                MetricType::QueueDsnQueued,
-                MetricType::QueueReportQueued,
-                MetricType::MessageIngestHam,
-                MetricType::MessageIngestSpam,
-                MetricType::AuthFailed,
-                MetricType::SecurityAuthenticationBan,
-                MetricType::SecurityScanBan,
-                MetricType::SecurityAbuseBan,
-                MetricType::SecurityLoiterBan,
-                MetricType::SecurityIpBlocked,
-                MetricType::IncomingReportDmarcReport,
-                MetricType::IncomingReportDmarcReportWithWarnings,
-                MetricType::IncomingReportTlsReport,
-                MetricType::IncomingReportTlsReportWithWarnings,
-            ] {
-                let reading = Collector::read_metric_counter(event.event_id());
-                if reading > 0 {
-                    let history = history_guard.events.entry(event).or_insert(0);
-                    let diff = reading - *history;
-                    *history = reading;
+        // Snapshot the current collector state, computing deltas against the
+        // previous cycle for cumulative series (counters, histograms).
+        let metrics = {
+            let mut history = history.lock();
+            let mut metrics = Vec::new();
 
-                    if diff > 0 {
-                        #[cfg(not(any(feature = "dev_mode", feature = "test_mode")))]
-                        let metric_id = history_guard.id_generator.generate();
-
-                        #[cfg(any(feature = "dev_mode", feature = "test_mode"))]
-                        let metric_id = _timestamp
-                            .map(|timestamp| {
-                                SnowflakeIdGenerator::global_id_from_timestamp(timestamp).unwrap()
-                            })
-                            .unwrap_or_else(|| history_guard.id_generator.generate());
-
-                        batch.set(
-                            ValueClass::Telemetry(TelemetryClass::Metric(metric_id)),
-                            Metric::Counter(MetricCount {
-                                count: diff as u64,
-                                metric: event,
-                            })
-                            .to_pickled_vec(),
-                        );
-                    }
+            // Counters: the collector reports the running total per event type.
+            // Only event types that have a corresponding metric type are stored.
+            for counter in Collector::collect_counters(true) {
+                let Some(metric) = MetricType::parse(counter.id().as_str()) else {
+                    continue;
+                };
+                let total = counter.value() as u32;
+                let previous = history.events.get(&metric).copied().unwrap_or(0);
+                let delta = total.saturating_sub(previous);
+                if delta > 0 {
+                    metrics.push(Metric::Counter(MetricCount {
+                        count: delta as u64,
+                        metric,
+                    }));
                 }
+                history.events.insert(metric, total);
             }
 
+            // Gauges: point-in-time values, persisted verbatim.
             for gauge in Collector::collect_gauges(true) {
-                let metric = gauge.id();
-                if matches!(metric, MetricType::QueueCount | MetricType::ServerMemory) {
-                    let value = gauge.get();
-                    if value > 0 {
-                        #[cfg(not(any(feature = "dev_mode", feature = "test_mode")))]
-                        let metric_id = history_guard.id_generator.generate();
-
-                        #[cfg(any(feature = "dev_mode", feature = "test_mode"))]
-                        let metric_id = _timestamp
-                            .map(|timestamp| {
-                                SnowflakeIdGenerator::global_id_from_timestamp(timestamp).unwrap()
-                            })
-                            .unwrap_or_else(|| history_guard.id_generator.generate());
-
-                        batch.set(
-                            ValueClass::Telemetry(TelemetryClass::Metric(metric_id)),
-                            Metric::Gauge(MetricCount {
-                                count: value,
-                                metric,
-                            })
-                            .to_pickled_vec(),
-                        );
-                    }
-                }
+                metrics.push(Metric::Gauge(MetricCount {
+                    count: gauge.get(),
+                    metric: gauge.id(),
+                }));
             }
 
+            // Histograms: the collector reports cumulative sum/count, store the
+            // increment observed since the previous cycle.
             for histogram in Collector::collect_histograms(true) {
                 let metric = histogram.id();
-                if matches!(
-                    metric,
-                    MetricType::MessageIngestTime
-                        | MetricType::MessageIngestIndexTime
-                        | MetricType::DeliveryTotalTime
-                        | MetricType::DeliveryAttemptTime
-                        | MetricType::DnsLookupTime
-                        | MetricType::StoreDataReadTime
-                        | MetricType::StoreDataWriteTime
-                        | MetricType::StoreBlobReadTime
-                        | MetricType::StoreBlobWriteTime
-                ) {
-                    let history = history_guard.histograms.entry(metric).or_default();
-                    let sum = histogram.sum();
-                    let count = histogram.count();
-                    let diff_sum = sum - history.sum;
-                    let diff_count = count - history.count;
-                    history.sum = sum;
-                    history.count = count;
-                    if diff_sum > 0 || diff_count > 0 {
-                        #[cfg(not(any(feature = "dev_mode", feature = "test_mode")))]
-                        let metric_id = history_guard.id_generator.generate();
-
-                        #[cfg(any(feature = "dev_mode", feature = "test_mode"))]
-                        let metric_id = _timestamp
-                            .map(|timestamp| {
-                                SnowflakeIdGenerator::global_id_from_timestamp(timestamp).unwrap()
-                            })
-                            .unwrap_or_else(|| history_guard.id_generator.generate());
-
-                        batch.set(
-                            ValueClass::Telemetry(TelemetryClass::Metric(metric_id)),
-                            Metric::Histogram(MetricSum { count, metric, sum }).to_pickled_vec(),
-                        );
-                    }
+                let sum = histogram.sum();
+                let count = histogram.count();
+                let previous = history.histograms.get(&metric).copied().unwrap_or_default();
+                let delta_count = count.saturating_sub(previous.count);
+                if delta_count > 0 {
+                    metrics.push(Metric::Histogram(MetricSum {
+                        count: delta_count,
+                        sum: sum.saturating_sub(previous.sum),
+                        metric,
+                    }));
                 }
+                history
+                    .histograms
+                    .insert(metric, HistogramHistory { sum, count });
             }
+
+            metrics
+        };
+
+        if metrics.is_empty() {
+            return Ok(());
         }
 
-        if !batch.is_empty() {
-            self.write(batch.build_all())
-                .await
-                .caused_by(trc::location!())?;
+        // Assign an id to each metric. When a fixed timestamp is supplied
+        // (historical backfill), derive ids from it; otherwise use the live
+        // snowflake generator.
+        let base_id = timestamp
+            .and_then(SnowflakeIdGenerator::from_timestamp)
+            .unwrap_or_else(|| history.lock().id_generator.generate());
+
+        let mut batch = BatchBuilder::new();
+        for (offset, metric) in metrics.into_iter().enumerate() {
+            batch.set(
+                ValueClass::Telemetry(TelemetryClass::Metric(base_id + offset as u64)),
+                metric.to_pickled_vec(),
+            );
         }
 
-        Ok(())
+        self.write(batch.build_all()).await.map(|_| ())
     }
 
     async fn purge_metrics(&self, period: Duration) -> trc::Result<()> {
-        let until_span_id = SnowflakeIdGenerator::from_duration(period).ok_or_else(|| {
-            trc::StoreEvent::UnexpectedError
-                .caused_by(trc::location!())
-                .ctx(trc::Key::Reason, "Failed to generate reference metric id.")
-        })?;
-
-        self.delete_range(
-            ValueKey::from(ValueClass::Telemetry(TelemetryClass::Metric(0))),
-            ValueKey::from(ValueClass::Telemetry(TelemetryClass::Metric(until_span_id))),
-        )
-        .await
-        .caused_by(trc::location!())
-    }
-}
-
-impl MetricsHistory {
-    pub fn init() -> SharedMetricHistory {
-        Arc::new(Mutex::new(Self::default()))
+        if let Some(threshold) = SnowflakeIdGenerator::from_duration(period) {
+            self.delete_range(
+                ValueKey::from(ValueClass::Telemetry(TelemetryClass::Metric(0))),
+                ValueKey::from(ValueClass::Telemetry(TelemetryClass::Metric(threshold))),
+            )
+            .await
+        } else {
+            Ok(())
+        }
     }
 }

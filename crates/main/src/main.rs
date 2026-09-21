@@ -61,14 +61,6 @@ async fn main() -> std::io::Result<()> {
     init.bootstrap.log_errors();
     init.bootstrap.log_warnings();
 
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    // Log licensing information
-    #[cfg(feature = "enterprise")]
-    init.inner.build_server().log_license_details();
-    // SPDX-SnippetEnd
-
     #[cfg(feature = "dev_mode")]
     if std::env::var("INSERT_TEST_DATA").is_ok() {
         let server = init.inner.build_server();

@@ -510,22 +510,15 @@ impl Server {
         &self,
         domain_name: &str,
     ) -> trc::Result<Option<&Arc<Directory>>> {
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
-        if self.core.is_enterprise_edition() {
-            return Ok(self
-                .domain(domain_name)
-                .await
-                .caused_by(trc::location!())?
-                .and_then(|domain| domain.id_directory)
-                .and_then(|id_directory| self.core.storage.directories.get(&id_directory))
-                .or_else(|| self.get_default_directory()));
-        }
-        // SPDX-SnippetEnd
-
-        Ok(self.get_default_directory())
+        // Route to the directory configured for the account's domain, falling
+        // back to the default directory when none is set.
+        Ok(self
+            .domain(domain_name)
+            .await
+            .caused_by(trc::location!())?
+            .and_then(|domain| domain.id_directory)
+            .and_then(|id_directory| self.core.storage.directories.get(&id_directory))
+            .or_else(|| self.get_default_directory()))
     }
 
     async fn get_directory_for_token(&self, token: &str) -> trc::Result<Option<&Arc<Directory>>> {
@@ -546,41 +539,27 @@ impl Server {
     }
 
     fn get_directory_for_issuer(&self, issuer: &str) -> Option<&Arc<Directory>> {
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
-        if self.core.is_enterprise_edition() {
-            let mut matches = self.core.storage.directories.values().filter(|directory| {
-                directory
-                    .oidc_discovery_document()
-                    .is_some_and(|discovery| discovery.document.issuer == issuer)
-            });
+        // Match the directory whose OIDC discovery document advertises this
+        // issuer. Only a unique match resolves; ambiguity yields none.
+        let mut matches = self.core.storage.directories.values().filter(|directory| {
+            directory
+                .oidc_discovery_document()
+                .is_some_and(|discovery| discovery.document.issuer == issuer)
+        });
 
-            return match (matches.next(), matches.next()) {
-                (Some(directory), None) => Some(directory),
-                _ => None,
-            };
+        match (matches.next(), matches.next()) {
+            (Some(directory), None) => Some(directory),
+            _ => None,
         }
-        // SPDX-SnippetEnd
-
-        None
     }
 
     pub fn get_directory_for_cached_domain(&self, domain: &DomainCache) -> Option<&Arc<Directory>> {
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
-        if self.core.is_enterprise_edition() {
-            return domain
-                .id_directory
-                .and_then(|domain_id| self.core.storage.directories.get(&domain_id))
-                .or_else(|| self.get_default_directory());
-        }
-        // SPDX-SnippetEnd
-
-        self.get_default_directory()
+        // Route to the cached domain's configured directory, falling back to the
+        // default directory when none is set.
+        domain
+            .id_directory
+            .and_then(|domain_id| self.core.storage.directories.get(&domain_id))
+            .or_else(|| self.get_default_directory())
     }
 }
 

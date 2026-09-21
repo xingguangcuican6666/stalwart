@@ -91,7 +91,6 @@ socket2 = "0.6"
 [features]
 test_mode = []
 dev_mode = []
-enterprise = []
 foundation = []
 
 [dev-dependencies]

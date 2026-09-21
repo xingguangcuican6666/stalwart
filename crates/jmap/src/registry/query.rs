@@ -7,7 +7,6 @@
 use crate::{
     api::query::QueryResponseBuilder,
     registry::{
-        EnterpriseRegistry,
         mapping::{
             RegistryQueryResponse, account::credential_query, cluster::cluster_node_query,
             log::log_query, queued_message::queued_message_query, report::report_query,
@@ -59,7 +58,6 @@ impl RegistryQuery for Server {
                 "can be accessed until the bootstrap process is complete.",
             )));
         }
-        self.assert_enterprise_object(object_type)?;
 
         match object_type {
             ObjectType::ArfExternalReport
@@ -75,10 +73,25 @@ impl RegistryQuery for Server {
             .await
             .and_then(|response| response.build()),
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
+            // Clean-room AGPL: telemetry read API.
+            ObjectType::Metric => super::mapping::telemetry::metric_query(RegistryQueryResponse {
+                server: self,
+                access_token,
+                object_type,
+                request,
+            })
+            .await
+            .and_then(|response| response.build()),
+
+            ObjectType::Trace => super::mapping::telemetry::trace_query(RegistryQueryResponse {
+                server: self,
+                access_token,
+                object_type,
+                request,
+            })
+            .await
+            .and_then(|response| response.build()),
+
             ObjectType::ArchivedItem => {
                 super::mapping::archived_item::archived_item_query(RegistryQueryResponse {
                     server: self,
@@ -89,27 +102,6 @@ impl RegistryQuery for Server {
                 .await
                 .and_then(|response| response.build())
             }
-
-            #[cfg(feature = "enterprise")]
-            ObjectType::Metric => super::mapping::telemetry::metric_query(RegistryQueryResponse {
-                server: self,
-                access_token,
-                object_type,
-                request,
-            })
-            .await
-            .and_then(|response| response.build()),
-
-            #[cfg(feature = "enterprise")]
-            ObjectType::Trace => super::mapping::telemetry::trace_query(RegistryQueryResponse {
-                server: self,
-                access_token,
-                object_type,
-                request,
-            })
-            .await
-            .and_then(|response| response.build()),
-            // SPDX-SnippetEnd
             ObjectType::SpamTrainingSample => spam_sample_query(RegistryQueryResponse {
                 server: self,
                 access_token,

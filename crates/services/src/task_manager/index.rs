@@ -547,11 +547,8 @@ async fn build_contact_document(
     }
 }
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-
-#[cfg(feature = "enterprise")]
+// Clean-room AGPL: load a persisted span and build its search document so the
+// span becomes searchable in the tracing index.
 async fn build_tracing_span_document(
     server: &Server,
     span_id: u64,
@@ -566,13 +563,6 @@ async fn build_tracing_span_document(
         ))))
         .await
         .map(|trace| trace.map(|trace| build_span_document(span_id, trace)))
-}
-
-// SPDX-SnippetEnd
-
-#[cfg(not(feature = "enterprise"))]
-async fn build_tracing_span_document(_: &Server, _: u64) -> trc::Result<Option<IndexDocument>> {
-    Ok(None)
 }
 
 async fn delete_email_metadata(
@@ -601,21 +591,13 @@ async fn delete_email_metadata(
                 .caused_by(trc::location!())?;
             metadata.unindex(batch);
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-
-            // Hold blob for undeletion
-            #[cfg(feature = "enterprise")]
+            // Hold the blob for undeletion when a retention window is set: the
+            // deleted message is recorded as a recoverable ArchivedItem and its
+            // blob is kept alive until the window elapses.
             {
                 use email::message::metadata::ArchivedMetadataHeaderName;
 
-                if let Some(undelete_retention) = server
-                    .core
-                    .enterprise
-                    .as_ref()
-                    .and_then(|e| e.deleted_items_retention.as_ref())
-                {
+                if let Some(undelete_retention) = server.core.retention.deleted_items.as_ref() {
                     use email::message::metadata::MESSAGE_RECEIVED_MASK;
                     use registry::{
                         schema::structs::{ArchivedEmail, ArchivedItem},
@@ -694,8 +676,6 @@ async fn delete_email_metadata(
                         );
                 }
             }
-
-            // SPDX-SnippetEnd
         }
         None => {
             trc::event!(

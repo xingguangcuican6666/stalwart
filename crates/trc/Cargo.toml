@@ -22,7 +22,6 @@ hashify = "0.2.9"
 [features]
 test_mode = []
 dev_mode = []
-enterprise = []
 
 [dev-dependencies]
 

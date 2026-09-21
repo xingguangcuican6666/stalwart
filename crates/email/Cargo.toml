@@ -33,7 +33,6 @@ rkyv = { version = "0.8.18", features = ["little_endian"] }
 
 [features]
 test_mode = []
-enterprise = []
 
 [dev-dependencies]
 tokio = { version = "1.53", features = ["full"] }

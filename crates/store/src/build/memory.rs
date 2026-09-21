@@ -26,14 +26,10 @@ impl InMemoryStore {
             structs::InMemoryStore::RedisSentinel(redis_sentinel_store) => {
                 crate::backend::redis::RedisStore::open_sentinel(redis_sentinel_store).await
             }
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             structs::InMemoryStore::Sharded(store) => {
                 crate::backend::composite::sharded_lookup::ShardedInMemory::open(store).await
             }
-            // SPDX-SnippetEnd
+            #[allow(unreachable_patterns)]
             _ => Err("Binary was not compiled with the selected in-memory backend".to_string()),
         };
 
@@ -46,10 +42,6 @@ impl InMemoryStore {
         }
     }
 
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
     pub fn downgrade_store(self) -> InMemoryStore {
         match self {
             InMemoryStore::Sharded(_) => InMemoryStore::default(),
@@ -57,9 +49,7 @@ impl InMemoryStore {
         }
     }
 
-    #[cfg(feature = "enterprise")]
     pub fn is_enterprise(&self) -> bool {
         matches!(self, InMemoryStore::Sharded(_))
     }
-    // SPDX-SnippetEnd
 }

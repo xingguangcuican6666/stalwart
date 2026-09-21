@@ -29,12 +29,8 @@ impl BlobStore {
                 #[cfg(feature = "rocks")]
                 Store::RocksDb(store) => store.get_blob(key, 0..usize::MAX).await,
                 Store::Ephemeral(store) => store.get_blob(key, 0..usize::MAX).await,
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+                #[cfg(any(feature = "postgres", feature = "mysql"))]
                 Store::SQLReadReplica(store) => store.get_blob(key, 0..usize::MAX).await,
-                // SPDX-SnippetEnd
                 Store::None => Err(trc::StoreEvent::NotConfigured.into()),
             },
             BlobStore::Fs(store) => store.get_blob(key, 0..usize::MAX).await,
@@ -42,12 +38,7 @@ impl BlobStore {
             BlobStore::S3(store) => store.get_blob(key, 0..usize::MAX).await,
             #[cfg(feature = "azure")]
             BlobStore::Azure(store) => store.get_blob(key, 0..usize::MAX).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             BlobStore::Sharded(store) => store.get_blob(key, 0..usize::MAX).await,
-            // SPDX-SnippetEnd
         }
         .caused_by(trc::location!())?;
 
@@ -151,12 +142,8 @@ impl BlobStore {
                 #[cfg(feature = "rocks")]
                 Store::RocksDb(store) => store.put_blob(key, &data).await,
                 Store::Ephemeral(store) => store.put_blob(key, &data).await,
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+                #[cfg(any(feature = "postgres", feature = "mysql"))]
                 Store::SQLReadReplica(store) => store.put_blob(key, &data).await,
-                // SPDX-SnippetEnd
                 Store::None => Err(trc::StoreEvent::NotConfigured.into()),
             },
             BlobStore::Fs(store) => store.put_blob(key, &data).await,
@@ -164,12 +151,7 @@ impl BlobStore {
             BlobStore::S3(store) => store.put_blob(key, &data).await,
             #[cfg(feature = "azure")]
             BlobStore::Azure(store) => store.put_blob(key, &data).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             BlobStore::Sharded(store) => store.put_blob(key, &data).await,
-            // SPDX-SnippetEnd
         }
         .caused_by(trc::location!());
 
@@ -198,12 +180,8 @@ impl BlobStore {
                 #[cfg(feature = "rocks")]
                 Store::RocksDb(store) => store.delete_blob(key).await,
                 Store::Ephemeral(store) => store.delete_blob(key).await,
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(all(feature = "enterprise", any(feature = "postgres", feature = "mysql")))]
+                #[cfg(any(feature = "postgres", feature = "mysql"))]
                 Store::SQLReadReplica(store) => store.delete_blob(key).await,
-                // SPDX-SnippetEnd
                 Store::None => Err(trc::StoreEvent::NotConfigured.into()),
             },
             BlobStore::Fs(store) => store.delete_blob(key).await,
@@ -211,12 +189,7 @@ impl BlobStore {
             BlobStore::S3(store) => store.delete_blob(key).await,
             #[cfg(feature = "azure")]
             BlobStore::Azure(store) => store.delete_blob(key).await,
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
             BlobStore::Sharded(store) => store.delete_blob(key).await,
-            // SPDX-SnippetEnd
         }
         .caused_by(trc::location!());
 

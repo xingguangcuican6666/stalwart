@@ -23,7 +23,6 @@ chrono = { version = "0.4.45", features = ["serde"] }
 
 [features]
 test_mode = ["chrono"]
-enterprise = []
 
 [lints]
 workspace = true

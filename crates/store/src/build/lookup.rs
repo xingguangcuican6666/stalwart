@@ -41,17 +41,12 @@ impl LookupStores {
                     crate::backend::sqlite::SqliteStore::open(sqlite_store)
                         .map(crate::InMemoryStore::Store)
                 }
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                #[cfg(feature = "enterprise")]
                 LookupStore::Sharded(sharded_in_memory_store) => {
                     crate::backend::composite::sharded_lookup::ShardedInMemory::open(
                         sharded_in_memory_store,
                     )
                     .await
                 }
-                // SPDX-SnippetEnd
                 #[cfg(feature = "redis")]
                 LookupStore::Redis(redis_store) => {
                     crate::backend::redis::RedisStore::open_single(redis_store).await
