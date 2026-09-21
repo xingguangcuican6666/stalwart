@@ -40,58 +40,13 @@ pub mod storage;
 pub mod telemetry;
 
 impl Core {
-    pub async fn parse(bp: &mut Bootstrap, mut storage: Storage) -> Self {
-        // SPDX-SnippetBegin
-        // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-        // SPDX-License-Identifier: LicenseRef-SEL
-        #[cfg(feature = "enterprise")]
-        let enterprise = {
-            let enterprise = crate::enterprise::Enterprise::parse(bp).await;
-            if enterprise.is_none() && !bp.registry.is_recovery_mode() {
-                use registry::schema::prelude::ObjectType;
-                use store::Store;
-
-                if storage.data.is_enterprise() {
-                    bp.build_error(
-                        ObjectType::DataStore.singleton(),
-                        "Disabling enterprise-only data store.",
-                    );
-                    storage.data = storage.data.downgrade_store();
-                }
-                if storage.blob.is_enterprise() {
-                    bp.build_error(
-                        ObjectType::BlobStore.singleton(),
-                        "Disabling enterprise-only blob store.",
-                    );
-                    storage.blob = storage.blob.downgrade_store();
-                }
-                if storage.memory.is_enterprise() {
-                    bp.build_error(
-                        ObjectType::InMemoryStore.singleton(),
-                        "Disabling enterprise-only in-memory store.",
-                    );
-                    storage.memory = storage.memory.downgrade_store();
-                }
-                storage.metrics = Store::None;
-                storage.tracing = Store::None;
-                storage.directories.clear();
-            }
-            enterprise
-        };
-        // SPDX-SnippetEnd
-
+    pub async fn parse(bp: &mut Bootstrap, storage: Storage) -> Self {
         // Parse AI endpoints up front so the spam-filter LLM config can resolve
         // its model reference. `ai_apis_by_id` maps numeric object ids to the
         // parsed endpoints; `ai` keeps the string-keyed map used at runtime.
         let (ai, ai_apis_by_id) = crate::config::mailstore::ai::AiConfig::parse(bp).await;
 
         Self {
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
-            enterprise,
-            // SPDX-SnippetEnd
             sieve: Scripting::parse(bp).await,
             network: Network::parse(bp).await,
             smtp: Box::pin(SmtpConfig::parse(bp)).await,

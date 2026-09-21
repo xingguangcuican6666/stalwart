@@ -47,7 +47,7 @@ tikv-jemallocator = "0.7"
 [features]
 #default = ["sqlite", "postgres", "mysql", "rocks", "s3", "redis", "azure", "nats", "enterprise", "zenoh", "kafka"]
 #default = ["sqlite", "postgres", "mysql", "rocks", "s3", "redis", "azure", "nats", "enterprise"]
-default = ["rocks", "enterprise"]
+default = ["rocks"]
 sqlite = ["store/sqlite", "directory/sqlite"]
 foundationdb = ["store/foundation", "common/foundation"]
 postgres = ["store/postgres", "directory/postgres"]
@@ -59,22 +59,7 @@ azure = ["store/azure"]
 nats = ["coordinator/nats"]
 zenoh = ["coordinator/zenoh"]
 kafka = ["coordinator/kafka"]
-enterprise = [ "jmap/enterprise", 
-               "smtp/enterprise", 
-               "common/enterprise", 
-               "store/enterprise", 
-               "managesieve/enterprise", 
-               "directory/enterprise", 
-               "email/enterprise",
-               "spam-filter/enterprise",
-               "http/enterprise",
-               "scim/enterprise",
-               "dav/enterprise",
-               "groupware/enterprise",
-               "trc/enterprise",
-               "services/enterprise",
-               "migration/enterprise" ]
-dev_mode = [ "common/dev_mode", 
+dev_mode = [ "common/dev_mode",
              "trc/dev_mode", 
              "dav/dev_mode",
              "http/dev_mode",

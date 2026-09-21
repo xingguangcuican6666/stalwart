@@ -73,15 +73,6 @@ pub mod sharing;
 pub mod storage;
 pub mod telemetry;
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-
-#[cfg(feature = "enterprise")]
-pub mod enterprise;
-
-// SPDX-SnippetEnd
-
 pub use psl;
 
 pub static VERSION_PRIVATE: &str = env!("CARGO_PKG_VERSION");
@@ -387,13 +378,6 @@ pub struct Core {
     pub metrics: Metrics,
     pub branding: crate::config::branding::BrandingConfig,
     pub retention: crate::config::retention::RetentionConfig,
-
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
-    pub enterprise: Option<enterprise::Enterprise>,
-    // SPDX-SnippetEnd
 }
 
 pub trait BuildServer {
