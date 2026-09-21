@@ -28,7 +28,6 @@ icu_datetime = { version = "~2.3", features = ["unstable_chrono_0_4"] }
 
 [features]
 test_mode = []
-enterprise = []
 
 [dev-dependencies]
 

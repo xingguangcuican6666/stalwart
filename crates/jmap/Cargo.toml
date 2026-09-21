@@ -49,7 +49,6 @@ hashify = "0.2"
 [features]
 test_mode = []
 dev_mode = []
-enterprise = []
 
 [lints]
 workspace = true

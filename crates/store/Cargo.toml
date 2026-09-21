@@ -71,7 +71,6 @@ azure = ["azure_core", "azure_storage", "azure_storage_blobs", "futures"]
 # In-memory stores
 redis = ["dep:redis", "deadpool", "deadpool/rt_tokio_1", "futures"]
 
-enterprise = []
 test_mode = []
 
 [lints]

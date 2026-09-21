@@ -19,7 +19,6 @@ nats = ["async-nats", "futures"]
 zenoh = ["dep:zenoh"]
 kafka = ["rdkafka"]
 redis = ["dep:redis", "futures"]
-enterprise = []
 test_mode = []
 
 [lints]

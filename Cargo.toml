@@ -14,8 +14,6 @@ members = [
     "crates/managesieve",
     "crates/pop3",
     "crates/dav-proto",
-    "crates/scim-proto",
-    "crates/scim",
     "crates/dav",
     "crates/groupware",
     "crates/spam-filter",

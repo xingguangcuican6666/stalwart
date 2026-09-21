@@ -14,9 +14,6 @@ use common::{
     Server,
     auth::{AccountCache, AccountInfo},
     config::mailstore::spamfilter::SpamFilterAction,
-    enterprise::llm::{
-        ChatCompletionChoice, ChatCompletionRequest, ChatCompletionResponse, Message,
-    },
 };
 use http_proto::{JsonResponse, ToHttpResponse};
 use hyper::Method;
@@ -64,6 +61,37 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+
+// Minimal OpenAI chat/completions wire types used by the mock LLM endpoint
+// below. They mirror the JSON the spam-filter's AI client sends and expects,
+// so the mock can decode the request and hand back a well-formed reply.
+#[derive(serde::Deserialize)]
+struct ChatCompletionRequest {
+    model: String,
+    messages: Vec<Message>,
+}
+
+#[derive(serde::Serialize)]
+struct ChatCompletionResponse {
+    id: String,
+    object: String,
+    created: u64,
+    model: String,
+    choices: Vec<ChatCompletionChoice>,
+}
+
+#[derive(serde::Serialize)]
+struct ChatCompletionChoice {
+    index: u32,
+    message: Message,
+    finish_reason: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Message {
+    role: String,
+    content: String,
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn antispam() {

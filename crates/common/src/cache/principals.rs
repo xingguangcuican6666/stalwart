@@ -159,14 +159,6 @@ impl Server {
                     flags |= DOMAIN_FLAG_RELAY;
                 }
 
-                // SPDX-SnippetBegin
-                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                // SPDX-License-Identifier: LicenseRef-SEL
-                if domain.allow_scim_provisioning {
-                    flags |= crate::auth::DOMAIN_FLAG_SCIM_PROVISIONING;
-                }
-                // SPDX-SnippetEnd
-
                 let sub_addressing_custom = match domain.sub_addressing {
                     SubAddressing::Enabled => {
                         flags |= DOMAIN_FLAG_SUB_ADDRESSING;

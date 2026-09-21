@@ -37,7 +37,6 @@ psl = "2"
 
 [features]
 test_mode = []
-enterprise = []
 
 [lints]
 workspace = true

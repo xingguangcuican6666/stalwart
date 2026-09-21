@@ -4,10 +4,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-SEL
  */
 
-use crate::{
-    directory::oidc::get_token_for_client,
-    utils::{containers, server::TestServerBuilder},
-};
+use crate::utils::{containers, server::TestServerBuilder};
 use base64::{Engine, engine::general_purpose};
 use registry::{
     schema::{
@@ -97,6 +94,41 @@ fn access_token_claims(token: &str) -> serde_json::Value {
             .expect("Failed to decode the token payload"),
     )
     .expect("Failed to parse the token claims")
+}
+
+// Exchange OIDC resource-owner-password credentials for an access token via
+// the Keycloak realm's token endpoint (standard OAuth2 password grant).
+async fn get_token_for_client(
+    client_id: &str,
+    client_secret: &str,
+    username: &str,
+    password: &str,
+    scope: &str,
+) -> String {
+    let response = reqwest::Client::new()
+        .post("http://localhost:9080/realms/stalwart/protocol/openid-connect/token")
+        .form(&[
+            ("grant_type", "password"),
+            ("client_id", client_id),
+            ("client_secret", client_secret),
+            ("username", username),
+            ("password", password),
+            ("scope", scope),
+        ])
+        .send()
+        .await
+        .expect("Failed to send token request");
+
+    let body = response
+        .text()
+        .await
+        .expect("Failed to read token response");
+
+    serde_json::from_str::<serde_json::Value>(&body)
+        .expect("Failed to parse token response")["access_token"]
+        .as_str()
+        .expect("No access_token in response")
+        .to_string()
 }
 
 async fn session_status(token: &str) -> u16 {
