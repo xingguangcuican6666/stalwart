@@ -356,45 +356,40 @@ async fn store_maintenance(
             }
         }
         TaskStoreMaintenanceType::ResetTenantQuotas => {
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
+            // Clean-room AGPL: per-tenant quota recalculation, part of the base
+            // multi-tenancy support.
+            let mut batch = BatchBuilder::new();
+            let now = now() as i64;
+
+            for tenant_id in server
+                .registry()
+                .query::<RoaringBitmap>(RegistryQuery::new(ObjectType::Tenant))
+                .await?
             {
-                let mut batch = BatchBuilder::new();
-                let now = now() as i64;
+                #[cfg(feature = "test_mode")]
+                let status = TaskStatus::at(now);
 
-                for tenant_id in server
-                    .registry()
-                    .query::<RoaringBitmap>(RegistryQuery::new(ObjectType::Tenant))
-                    .await?
-                {
-                    #[cfg(feature = "test_mode")]
-                    let status = TaskStatus::at(now);
+                #[cfg(not(feature = "test_mode"))]
+                let status =
+                    TaskStatus::at(now + rand::RngExt::random_range(&mut rand::rng(), 0..=300));
 
-                    #[cfg(not(feature = "test_mode"))]
-                    let status =
-                        TaskStatus::at(now + rand::RngExt::random_range(&mut rand::rng(), 0..=300));
+                batch.schedule_task(Task::TenantMaintenance(TaskTenantMaintenance {
+                    tenant_id: tenant_id.into(),
+                    maintenance_type: TaskTenantMaintenanceType::RecalculateQuota,
+                    status,
+                }));
 
-                    batch.schedule_task(Task::TenantMaintenance(TaskTenantMaintenance {
-                        tenant_id: tenant_id.into(),
-                        maintenance_type: TaskTenantMaintenanceType::RecalculateQuota,
-                        status,
-                    }));
-
-                    if batch.is_large_batch() {
-                        server.core.storage.data.write(batch.build_all()).await?;
-                        server.notify_task_queue();
-                        batch = BatchBuilder::new();
-                    }
-                }
-
-                if !batch.is_empty() {
+                if batch.is_large_batch() {
                     server.core.storage.data.write(batch.build_all()).await?;
                     server.notify_task_queue();
+                    batch = BatchBuilder::new();
                 }
             }
-            // SPDX-SnippetEnd
+
+            if !batch.is_empty() {
+                server.core.storage.data.write(batch.build_all()).await?;
+                server.notify_task_queue();
+            }
         }
     }
 
@@ -497,10 +492,8 @@ async fn recalculate_quota(server: &Server, account_id: u32) -> trc::Result<()> 
         .map(|_| ())
 }
 
-// SPDX-SnippetBegin
-// SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-// SPDX-License-Identifier: LicenseRef-SEL
-#[cfg(feature = "enterprise")]
+// Clean-room AGPL: recompute a tenant's aggregate storage quota, part of the
+// base multi-tenancy support.
 async fn recalculate_tenant_quota(server: &Server, tenant_id: u32) -> trc::Result<()> {
     let mut quota = 0;
     for account_id in server
@@ -526,12 +519,6 @@ async fn recalculate_tenant_quota(server: &Server, tenant_id: u32) -> trc::Resul
         .await
         .caused_by(trc::location!())
         .map(|_| ())
-}
-// SPDX-SnippetEnd
-
-#[cfg(not(feature = "enterprise"))]
-async fn recalculate_tenant_quota(_server: &Server, _tenant_id: u32) -> trc::Result<()> {
-    Ok(())
 }
 
 async fn reset_imap_uids(server: &Server, account_id: u32) -> trc::Result<(u32, u32)> {

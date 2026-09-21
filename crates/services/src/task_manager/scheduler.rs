@@ -44,12 +44,6 @@ enum Event {
     InternalMetrics,
     // Clean-room AGPL: periodic evaluation of configured metric alerts.
     AlertMetrics,
-    // SPDX-SnippetBegin
-    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-    // SPDX-License-Identifier: LicenseRef-SEL
-    #[cfg(feature = "enterprise")]
-    RenewLicense,
-    // SPDX-SnippetEnd
 }
 
 #[derive(Default)]
@@ -132,23 +126,8 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                 Event::InternalMetrics,
             );
 
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-            // SPDX-License-Identifier: LicenseRef-SEL
-
-            // Enterprise Edition license management
             // Clean-room AGPL: evaluate configured metric alerts periodically.
             queue.schedule(Instant::now() + METRIC_ALERTS_INTERVAL, Event::AlertMetrics);
-
-            #[cfg(feature = "enterprise")]
-            if let Some(enterprise) = &server.core.enterprise {
-                queue.schedule(
-                    Instant::now() + enterprise.license.renew_in(),
-                    Event::RenewLicense,
-                );
-            }
-
-            // SPDX-SnippetEnd
         }
 
         // Clean-room AGPL: running state for cumulative metric deltas.
@@ -248,14 +227,8 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                             if roles.metrics_push {
                                 let otel = otel.clone();
 
-                                // SPDX-SnippetBegin
-                                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                                // SPDX-License-Identifier: LicenseRef-SEL
-                                #[cfg(feature = "enterprise")]
-                                let is_enterprise = server.is_enterprise_edition();
-                                // SPDX-SnippetEnd
-
-                                #[cfg(not(feature = "enterprise"))]
+                                // Enterprise-only metrics are not part of the
+                                // AGPL base.
                                 let is_enterprise = false;
 
                                 tokio::spawn(async move {
@@ -288,23 +261,6 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                         tokio::spawn(async move {
                             let elapsed = Instant::now();
                             if server.core.network.roles.metrics_calculate {
-                                // SPDX-SnippetBegin
-                                // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                                // SPDX-License-Identifier: LicenseRef-SEL
-                                #[cfg(feature = "enterprise")]
-                                if server.is_enterprise_edition() {
-                                    // Obtain queue size
-                                    match server.total_queued_messages().await {
-                                        Ok(total) => {
-                                            Collector::update_gauge(MetricType::QueueCount, total);
-                                        }
-                                        Err(err) => {
-                                            trc::error!(err.details("Failed to obtain queue size"));
-                                        }
-                                    }
-                                }
-                                // SPDX-SnippetEnd
-
                                 if update_other_metrics {
                                     match server.total_accounts().await {
                                         Ok(total) => {
@@ -444,63 +400,6 @@ pub fn spawn_task_scheduler(inner: Arc<Inner>) {
                         });
                     }
 
-                    // SPDX-SnippetBegin
-                    // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                    // SPDX-License-Identifier: LicenseRef-SEL
-                    #[cfg(feature = "enterprise")]
-                    Event::RenewLicense => {
-                        use common::ipc::RegistryChange;
-                        use registry::schema::prelude::ObjectType;
-
-                        trc::event!(
-                            TaskManager(TaskManagerEvent::TaskQueued),
-                            Type = "validateLicense"
-                        );
-
-                        match Box::pin(
-                            server.reload_registry(RegistryChange::Reload(ObjectType::Enterprise)),
-                        )
-                        .await
-                        {
-                            Ok(result) => {
-                                if !result.has_errors() {
-                                    if let Some(enterprise) =
-                                        server.inner.build_server().core.enterprise.as_ref()
-                                    {
-                                        let renew_in = if enterprise.license.is_near_expiration() {
-                                            // Something went wrong during renewal, try again in 1 day or 1 hour,
-                                            // depending on the time left on the license
-                                            if enterprise.license.expires_in()
-                                                < Duration::from_secs(86400)
-                                            {
-                                                Duration::from_secs(3600)
-                                            } else {
-                                                Duration::from_secs(86400)
-                                            }
-                                        } else {
-                                            enterprise.license.renew_in()
-                                        };
-
-                                        queue.schedule(
-                                            Instant::now() + renew_in,
-                                            Event::RenewLicense,
-                                        );
-                                    }
-
-                                    server
-                                        .cluster_broadcast(common::ipc::BroadcastEvent::reload(
-                                            ObjectType::Enterprise,
-                                        ))
-                                        .await;
-                                } else {
-                                    result.log();
-                                }
-                            }
-                            Err(err) => {
-                                trc::error!(err.details("Failed to reload configuration."));
-                            }
-                        }
-                    } // SPDX-SnippetEnd
                 }
             }
 
@@ -569,12 +468,6 @@ impl Event {
             Event::InternalMetrics => "internalMetrics",
             // Clean-room AGPL: periodic metric-alert evaluation.
             Event::AlertMetrics => "alertMetrics",
-            // SPDX-SnippetBegin
-            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <info@stalwartlabs.com>
-            // SPDX-License-Identifier: LicenseRef-SEL
-            #[cfg(feature = "enterprise")]
-            Event::RenewLicense => "renewLicense",
-            // SPDX-SnippetEnd
         }
     }
 }

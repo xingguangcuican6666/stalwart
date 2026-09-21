@@ -128,15 +128,8 @@ impl Server {
                             // Update core
                             self.inner.shared_core.store(core.into());
 
-                            // Update tracers
-
-                            // SPDX-SnippetBegin
-                            // SPDX-FileCopyrightText: 2020 Stalwart Labs LLC <hello@stalw.art>
-                            // SPDX-License-Identifier: LicenseRef-SEL
-                            #[cfg(feature = "enterprise")]
-                            tracers.update(self.inner.shared_core.load().is_enterprise_edition());
-                            // SPDX-SnippetEnd
-                            #[cfg(not(feature = "enterprise"))]
+                            // Update tracers. Enterprise-only tracers are not
+                            // part of the AGPL base.
                             tracers.update(false);
 
                             // Reload queue settings
